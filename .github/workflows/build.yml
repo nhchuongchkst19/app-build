@@ -24,7 +24,7 @@ on:
       repository:
         description: 'Repository name'
         required: true
-      repository_TOKEN:
+      repositoryUrl:
         description: 'Repository name'
         required: true
       expo-token:
@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: 🏗 Clone code
-        run: git clone ${{ github.event.inputs.repository_TOKEN }}
+        run: git clone ${{ github.event.inputs.repositoryUrl }}
 
       - name: 🏗 Move code
         run: mv ./${{ github.event.inputs.repository }}/* ./
