@@ -44,7 +44,7 @@ jobs:
         run: git clone ${{ github.event.inputs.repositoryUrl }}
 
       - name: 🏗 Move code
-        run: mv -rf ./${{ github.event.inputs.repository }}/* ./
+        run: mv ./${{ github.event.inputs.repository }}/* ./
 
       - name: 🏗 Setup Node
         uses: actions/setup-node@v2
