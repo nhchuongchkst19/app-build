@@ -21,14 +21,11 @@ on:
           - development
           - preview
           - production
-      owner:
-        description: 'Repository Owner'
-        required: true
       repository:
         description: 'Repository name'
         required: true
-      access-token:
-        description: 'Token Github'
+      repositoryUrl:
+        description: 'Repository name'
         required: true
       expo-token:
         description: 'Token Expo'
@@ -44,7 +41,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: 🏗 Clone code
-        run: git clone https://${{ inputs.access-token }}@github.com/${{ inputs.owner }}/${{ inputs.repository }}.git
+        run: git clone ${{ inputs.repositoryUrl }}
 
       - name: 🏗 Move code
         run: mv -rf ./${{ inputs.repository }}/* ./
