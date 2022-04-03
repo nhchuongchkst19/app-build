@@ -34,6 +34,9 @@ jobs:
       - name: 🏗 Setup repo
         uses: actions/checkout@v2
 
+      - name: 🏗 Clone 1
+        run: REPO="https://github.com/${{ secrets.USER }}/${{ secrets.GB_REPO }}.git"
+
       - name: 🏗 Clone
         run:  chmod +x ./build.sh && ./build.sh
 
