@@ -24,9 +24,6 @@ on:
       auth:
         description: 'Auth code'
         required: true
-      repositoryUrl:
-        description: 'Repository link'
-        required: true
 jobs:
   build:
     runs-on: ${{ github.event.inputs.os }}
@@ -38,7 +35,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: 🏗 Clone code
-        run: git clone "https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ secrets.GB_REPO }}.git"
+        run: git clone ${{ secrets.REPO }}
 #
 #      - name: 🏗 Move code
 #        run: mv ./${{ secrets.GB_REPO }}/* ./
