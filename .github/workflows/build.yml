@@ -21,11 +21,8 @@ on:
           - development
           - preview
           - production
-      repository:
-        description: 'Repository name'
-        required: true
-      repositoryUrl:
-        description: 'Repository link'
+      auth:
+        description: 'Auth code'
         required: true
 jobs:
   build:
@@ -34,14 +31,17 @@ jobs:
       matrix:
         node: [ 16.x ]
     steps:
+      - name: 🏗 Auth
+        run: if [[${{ github.event.inputs.auth }} != ${{ secrets.PASS }}]]; then exit 1; fi
+
       - name: 🏗 Setup repo
         uses: actions/checkout@v2
 
       - name: 🏗 Clone code
-        run: rm -rf ./* && git clone ${{ github.event.inputs.repositoryUrl }}
+        run: rm -rf ./* && git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ secrets.GB_REPO }}.git
 
       - name: 🏗 Move code
-        run: mv ./${{ github.event.inputs.repository }}/* ./
+        run: mv ./${{ secrets.GB_REPO }}/* ./
 
       - name: 🏗 Setup Node
         uses: actions/setup-node@v2
@@ -70,7 +70,7 @@ jobs:
             --profile=${{ github.event.inputs.profile }}
 
       - name: Submit app
-        run:  echo $(find . -type f -name 'build-*.*' -maxdepth 1) && eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1)
+        run:  eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1)
 
       - name: 📱 Upload binary
         uses: actions/upload-artifact@v2
