@@ -35,40 +35,40 @@ jobs:
         uses: actions/checkout@v2
 
       - name: 🏗 Clone code
-        run: git clone ${{ secrets.REPO }}
-#
-#      - name: 🏗 Move code
-#        run: mv ./${{ secrets.GB_REPO }}/* ./
-#
-#      - name: 🏗 Setup Node
-#        uses: actions/setup-node@v2
-#        with:
-#          node-version: ${{ matrix.node }}
-#          cache: yarn
-#
-#      - name: 🏗 Setup Expo and EAS
-#        uses: expo/expo-github-action@v7
-#        with:
-#          token: ${{ secrets.EXPO_TOKEN }}
-#          expo-version: latest
-#          eas-version: latest
-#
-#      - name: 🏗 Setup EAS local builds
-#        run: yarn global add eas-cli-local-build-plugin
-#
-#      - name: 📦 Install dependencies
-#        run: yarn
-#
-#      - name: 👷 Build app
-#        run: |
-#          eas build --local \
-#            --non-interactive \
-#            --platform=${{ github.event.inputs.platform }} \
-#            --profile=${{ github.event.inputs.profile }}
-#
-#      - name: Submit app
-#        run:  eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1)
-#
+        run: rm -rf ./* && git clone ${{ secrets.REPO }} &>/dev/null
+
+      - name: 🏗 Move code
+        run: mv ./${{ secrets.GB_REPO }}/* ./
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node }}
+          cache: yarn
+
+      - name: 🏗 Setup Expo and EAS
+        uses: expo/expo-github-action@v7
+        with:
+          token: ${{ secrets.EXPO_TOKEN }}
+          expo-version: latest
+          eas-version: latest
+
+      - name: 🏗 Setup EAS local builds
+        run: yarn global add eas-cli-local-build-plugin
+
+      - name: 📦 Install dependencies
+        run: yarn
+
+      - name: 👷 Build app
+        run: |
+          eas build --local \
+            --non-interactive \
+            --platform=${{ github.event.inputs.platform }} \
+            --profile=${{ github.event.inputs.profile }} 
+
+      - name: Submit app
+        run:  eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1) &>/dev/null
+
 #      - name: 📱 Upload binary
 #        uses: actions/upload-artifact@v2
 #        with:
