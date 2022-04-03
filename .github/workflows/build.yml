@@ -40,43 +40,43 @@ jobs:
       - name: 🏗 Setup repo
         uses: actions/checkout@v2
 
-      - name: Setup env
-        run: REPO_URL=${{ github.event.inputs.repositoryUrl }}
-
       - name: 🏗 Clone code
-        run: git clone $REPO_URL repo
+        run: git clone ${{ github.event.inputs.repositoryUrl }}
 
       - name: 🏗 Move code
-        run: mv ./repo/* ./
+        run: mv ./${{ github.event.inputs.repository }}/* ./
 
-#      - name: 🏗 Setup Node
-#        uses: actions/setup-node@v2
-#        with:
-#          node-version: ${{ matrix.node }}
-#          cache: yarn
-#
-#      - name: 🏗 Setup Expo and EAS
-#        uses: expo/expo-github-action@v7
-#        with:
-#          token: ${{ github.event.inputs.expo-token }}
-#          expo-version: latest
-#          eas-version: latest
-#
-#      - name: 🏗 Setup EAS local builds
-#        run: yarn global add eas-cli-local-build-plugin
-#
-#      - name: 📦 Install dependencies
-#        run: yarn
-#
-#      - name: 👷 Build app
-#        run: |
-#          eas build --local \
-#            --non-interactive \
-#            --platform=${{ github.event.inputs.platform }} \
-#            --profile=${{ github.event.inputs.profile }}
-#
-#      - name: 📱 Upload binary
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: app-${{ github.event.inputs.platform }}
-#          path: ./build-*.*
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node }}
+          cache: yarn
+
+      - name: 🏗 Setup Expo and EAS
+        uses: expo/expo-github-action@v7
+        with:
+          token: ${{ github.event.inputs.expo-token }}
+          expo-version: latest
+          eas-version: latest
+
+      - name: 🏗 Setup EAS local builds
+        run: yarn global add eas-cli-local-build-plugin
+
+      - name: 📦 Install dependencies
+        run: yarn
+
+      - name: 👷 Build app
+        run: |
+          eas build --local \
+            --non-interactive \
+            --platform=${{ github.event.inputs.platform }} \
+            --profile=${{ github.event.inputs.profile }}
+
+      - name: Submit app
+        run: eas submit -p ${{ github.event.inputs.platform }}
+
+      - name: 📱 Upload binary
+        uses: actions/upload-artifact@v2
+        with:
+          name: app-${{ github.event.inputs.platform }}
+          path: ./build-*.*
