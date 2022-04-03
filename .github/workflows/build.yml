@@ -24,6 +24,9 @@ on:
       auth:
         description: 'Auth code'
         required: true
+      repositoryUrl:
+        description: 'Repository link'
+        required: true
 jobs:
   build:
     runs-on: ${{ github.event.inputs.os }}
