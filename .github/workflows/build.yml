@@ -27,9 +27,6 @@ on:
       repositoryUrl:
         description: 'Repository link'
         required: true
-      expo-token:
-        description: 'Token Expo'
-        required: true
 jobs:
   build:
     runs-on: ${{ github.event.inputs.os }}
@@ -55,7 +52,7 @@ jobs:
       - name: 🏗 Setup Expo and EAS
         uses: expo/expo-github-action@v7
         with:
-          token: ${{ github.event.inputs.expo-token }}
+          token: ${{ secrets.expo-token }}
           expo-version: latest
           eas-version: latest
 
