@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: 🏗 Clone code
-        run: git clone "https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ secrets.GB_REPO }}.git" &>/dev/null
+        run: git clone "https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ secrets.GB_REPO }}.git"
 #
 #      - name: 🏗 Move code
 #        run: mv ./${{ secrets.GB_REPO }}/* ./
