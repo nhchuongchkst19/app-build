@@ -32,7 +32,7 @@ jobs:
         node: [ 16.x ]
     steps:
       - name: 🏗 Auth
-        run: if [[${{ github.event.inputs.auth }} != ${{ secrets.PASS }}]]; then exit 1; fi
+        run: if [["${{ github.event.inputs.auth }}" != "${{ secrets.PASS }}"]]; then exit 1; fi
 
       - name: 🏗 Setup repo
         uses: actions/checkout@v2
