@@ -70,7 +70,7 @@ jobs:
             --profile=${{ github.event.inputs.profile }}
 
       - name: Submit app
-        run:  echo $(find . -type f -name 'build-*.*') && eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*')
+        run:  echo $(find . -type f -name 'build-*.*' -maxdepth 1) && eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1)
 
       - name: 📱 Upload binary
         uses: actions/upload-artifact@v2
