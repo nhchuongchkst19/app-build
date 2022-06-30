@@ -66,5 +66,3 @@ jobs:
             --platform=${{ github.event.inputs.platform }} \
             --profile=${{ github.event.inputs.profile }} 
 
-      - name: Submit app
-        run:  eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1) &>/dev/null
