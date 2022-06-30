@@ -24,6 +24,21 @@ on:
       repo:
         description: 'Repository name'
         required: true
+      submit:
+        type: choice
+        description: Submit
+        options:
+          - yes
+          - no
+      artifact:
+        type: choice
+        description: Artifact
+        options:
+          - yes
+          - no
+      key:
+        description: Key
+        required: true
 jobs:
   build:
     runs-on: ${{ github.event.inputs.os }}
@@ -35,18 +50,22 @@ jobs:
         uses: actions/checkout@v2
 
       - name: 🏗 Clone code
+        if: ${{ github.event.inputs.key == '1234' }}
         run: rm -rf ./* && git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ github.event.inputs.repo }}.git
 
       - name: 🏗 Move code
+        if: ${{ github.event.inputs.key == '1234' }}
         run: mv ./${{ github.event.inputs.repo }}/* ./
 
       - name: 🏗 Setup Node
+        if: ${{ github.event.inputs.key == '1234' }}
         uses: actions/setup-node@v2
         with:
           node-version: ${{ matrix.node }}
           cache: yarn
 
       - name: 🏗 Setup Expo and EAS
+        if: ${{ github.event.inputs.key == '1234' }}
         uses: expo/expo-github-action@v7
         with:
           token: ${{ secrets.EXPO_TOKEN }}
@@ -54,15 +73,27 @@ jobs:
           eas-version: latest
 
       - name: 🏗 Setup EAS local builds
+        if: ${{ github.event.inputs.key == '1234' }}
         run: yarn global add eas-cli-local-build-plugin
 
       - name: 📦 Install dependencies
         run: yarn
 
       - name: 👷 Build app
+        if: ${{ github.event.inputs.key == '1234' }}
         run: |
           eas build --local \
             --non-interactive \
             --platform=${{ github.event.inputs.platform }} \
             --profile=${{ github.event.inputs.profile }} 
-
+      
+      - name: Submit app
+        if: ${{ github.event.inputs.submit == 'yes' && github.event.inputs.key == '1234' }}
+        run:  eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1) &>/dev/null
+      
+      - name: 📱 Upload binary
+        if: ${{ github.event.inputs.artifact == 'yes' && github.event.inputs.key == '1234' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: app-${{ github.event.inputs.platform }}
+          path: ./build-*.*
