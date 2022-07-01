@@ -1,4 +1,4 @@
-name: Build App
+name: test env
 on:
   workflow_dispatch:
     inputs:
@@ -7,7 +7,7 @@ on:
         description: OS to build on. Ubuntu is faster, MacOS supports iOS builds, Windows is unsupported
         options:
           - ubuntu-latest
-          - macos-latest
+          - macos-12
 jobs:
   build:
     runs-on: ${{ github.event.inputs.os }}
