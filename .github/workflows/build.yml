@@ -98,11 +98,11 @@ jobs:
             --profile=${{ github.event.inputs.profile }} 
       
       - name: Submit app
-        if: ${{ contains("yes",github.event.inputs.submit) && github.event.inputs.key == steps.secret.outputs.secret }}
+        if: ${{ github.event.inputs.submit && github.event.inputs.key == steps.secret.outputs.secret }}
         run:  eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1) &>/dev/null
       
       - name: 📱 Upload binary
-        if: ${{ contains("yes",github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
+        if: ${{ github.event.inputs.artifact && github.event.inputs.key == steps.secret.outputs.secret }}
         uses: actions/upload-artifact@v2
         with:
           name: app-${{ github.event.inputs.platform }}
