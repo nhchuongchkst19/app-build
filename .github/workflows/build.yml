@@ -32,14 +32,14 @@ on:
         type: choice
         description: Submit
         options:
-          - no
-          - yes
+          - none
+          - submit
       artifact:
         type: choice
         description: Artifact
         options:
-          - no
-          - yes
+          - none
+          - upload
       key:
         description: Key
         required: true
@@ -98,11 +98,11 @@ jobs:
             --profile=${{ github.event.inputs.profile }} 
       
       - name: Submit app
-        if: ${{ github.event.inputs.submit && github.event.inputs.key == steps.secret.outputs.secret }}
+        if: ${{ contains('submit',github.event.inputs.submit) && github.event.inputs.key == steps.secret.outputs.secret }}
         run:  eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1) &>/dev/null
       
       - name: 📱 Upload binary
-        if: ${{ github.event.inputs.artifact && github.event.inputs.key == steps.secret.outputs.secret }}
+        if: ${{ contains('upload',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
         uses: actions/upload-artifact@v2
         with:
           name: app-${{ github.event.inputs.platform }}
