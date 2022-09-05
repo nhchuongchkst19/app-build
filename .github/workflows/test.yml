@@ -15,6 +15,19 @@ jobs:
       matrix:
         node: [ 16.x ]
     steps:
-      - name: List version
-        run: ls -n /Applications/ | grep Xcode*
+       - name: 🏗 Setup repo
+         uses: actions/checkout@v2
+         
+       - name: find afff
+         id: find_path
+         run: echo "::set-output name=test::$(echo $(find . -type f -name 'index.*' -maxdepth 1))"
+       - name: test
+         run: echo ${{ steps.find_path.outputs.test }}
+         
+       - name: 📱 Upload diawi
+         uses: rnkdsh/action-upload-diawi@v1.2.7
+         with:
+          token: ${{ secrets.DIAWI_TOKEN }}
+          file: ${{ steps.find_path.outputs.test }}
+          recipients: ${{ secrets.DIAWI_EMAIL }}
         
