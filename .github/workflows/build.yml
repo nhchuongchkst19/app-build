@@ -28,18 +28,14 @@ on:
         description: 'Branch name'
         default: master
         
-      submit:
-        type: choice
-        description: Submit
-        options:
-          - none
-          - submit
       artifact:
         type: choice
         description: Artifact
         options:
           - none
           - upload
+          - submit
+          - diawi
       key:
         description: Key
         required: true
@@ -60,7 +56,7 @@ jobs:
 
       - name: 🏗 Clone code
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: rm -rf ./* && git clone -b ${{ github.event.inputs.branch }} https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ github.event.inputs.repo }}.git
+        run: rm -rf ./* && git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ github.event.inputs.repo }}.git && git checkout ${{ github.event.inputs.branch }}
 
       - name: 🏗 Move code
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
@@ -98,7 +94,7 @@ jobs:
             --profile=${{ github.event.inputs.profile }} 
       
       - name: Submit app
-        if: ${{ contains('submit',github.event.inputs.submit) && github.event.inputs.key == steps.secret.outputs.secret }}
+        if: ${{ contains('submit',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
         run:  eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1) &>/dev/null
       
       - name: 📱 Upload binary
@@ -107,3 +103,11 @@ jobs:
         with:
           name: app-${{ github.event.inputs.platform }}
           path: ./build-*.*
+          
+      - name: 📱 Upload diawi
+        if: ${{ contains('diawi',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
+        uses: rnkdsh/action-upload-diawi@v1.2.7
+        with:
+          token: ${{ secrets.DIAWI_TOKEN }}
+          file: ./build-*.*
+          recipients: ${{ secrets.DIAWI_EMAIL }}
