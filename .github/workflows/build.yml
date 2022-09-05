@@ -56,7 +56,7 @@ jobs:
 
       - name: 🏗 Clone code
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: rm -rf ./* && git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ github.event.inputs.repo }}.git && git checkout ${{ github.event.inputs.branch }}
+        run: rm -rf ./* && git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ github.event.inputs.repo }}.git && git switch -c local origin/${{ github.event.inputs.branch }}
 
       - name: 🏗 Move code
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
