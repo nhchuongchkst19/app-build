@@ -92,22 +92,29 @@ jobs:
             --non-interactive \
             --platform=${{ github.event.inputs.platform }} \
             --profile=${{ github.event.inputs.profile }} 
+            
+      - name: Find path
+        id: find_path
+        run: echo "::set-output name=artifact_path::$(echo $(find . -type f -name 'build-*.*' -maxdepth 1))"
       
+      - name: Show path
+        run: echo ${{ steps.find_path.outputs.artifact_path }}
+
       - name: Submit app
         if: ${{ contains('submit',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
-        run:  eas submit -p ${{ github.event.inputs.platform }} --path $(find . -type f -name 'build-*.*' -maxdepth 1) &>/dev/null
+        run:  eas submit -p ${{ github.event.inputs.platform }} --path ${{ steps.find_path.outputs.artifact_path }}
       
       - name: 📱 Upload binary
         if: ${{ contains('upload',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
         uses: actions/upload-artifact@v2
         with:
           name: app-${{ github.event.inputs.platform }}
-          path: ./build-*.*
+          path: ${{ steps.find_path.outputs.artifact_path }}
           
       - name: 📱 Upload diawi
         if: ${{ contains('diawi',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
         uses: rnkdsh/action-upload-diawi@v1.2.7
         with:
           token: ${{ secrets.DIAWI_TOKEN }}
-          file: ./build-*.*
+          file: ${{ steps.find_path.outputs.artifact_path }}
           recipients: ${{ secrets.DIAWI_EMAIL }}
