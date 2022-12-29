@@ -79,7 +79,7 @@ jobs:
 
       - name: 🏗 Setup EAS local builds
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: ls && ls ./public/build && yarn global add eas-cli-local-build-plugin
+        run: yarn global add eas-cli-local-build-plugin
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
@@ -88,7 +88,7 @@ jobs:
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: |
-          eas build --local \
+          pwd && ls && ls ./public/build && eas build --local \
             --non-interactive \
             --platform=${{ github.event.inputs.platform }} \
             --profile=${{ github.event.inputs.profile }} 
