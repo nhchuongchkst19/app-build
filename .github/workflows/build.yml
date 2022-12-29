@@ -95,7 +95,7 @@ jobs:
 
       - name: 📦 Prebuild App
         if: ${{ github.event.inputs.prebuild && github.event.inputs.key == steps.secret.outputs.secret }}
-        run: mkdir /tmp/app-build && mv ./* /tmp/app-build
+        run: mkdir /tmp/app-build && cp -rf ./* /tmp/app-build/
 
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
