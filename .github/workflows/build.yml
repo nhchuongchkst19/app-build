@@ -21,6 +21,12 @@ on:
           - development
           - preview
           - production
+      prebuild:
+        type: choice
+        description: Prebuild App
+        options:
+          - no
+          - yes  
       repo:
         description: 'Repository name'
         required: true
@@ -84,6 +90,10 @@ jobs:
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: yarn
+
+      - name: 📦 Prebuild App
+        if: ${{ contains('Yes',github.event.inputs.prebuild) && github.event.inputs.key == steps.secret.outputs.secret }}
+        run: npm run prebuild
 
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
