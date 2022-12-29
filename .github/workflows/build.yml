@@ -21,12 +21,6 @@ on:
           - development
           - preview
           - production
-      prebuild:
-        type: choice
-        description: Prebuild App
-        options:
-          - no
-          - yes  
       repo:
         description: 'Repository name'
         required: true
@@ -45,8 +39,6 @@ on:
       key:
         description: Key
         required: true
-env:
-  EAS_LOCAL_BUILD_WORKINGDIR: /tmp/app-build
   
 jobs:
   build:
@@ -92,10 +84,6 @@ jobs:
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: yarn
-
-      - name: 📦 Prebuild App
-        if: ${{ github.event.inputs.prebuild && github.event.inputs.key == steps.secret.outputs.secret }}
-        run: mkdir /tmp/app-build && cp -rf ./* /tmp/app-build/
 
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
