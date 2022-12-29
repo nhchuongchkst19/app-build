@@ -88,7 +88,7 @@ jobs:
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: |
-          pwd && ls && ls ./public/build && eas build --local \
+          eas build --local \
             --non-interactive \
             --platform=${{ github.event.inputs.platform }} \
             --profile=${{ github.event.inputs.profile }} 
