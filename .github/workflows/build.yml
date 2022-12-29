@@ -45,7 +45,9 @@ on:
       key:
         description: Key
         required: true
-        
+env:
+  EAS_LOCAL_BUILD_WORKINGDIR: /tmp/app-build
+  
 jobs:
   build:
     runs-on: ${{ github.event.inputs.os }}
@@ -93,7 +95,7 @@ jobs:
 
       - name: 📦 Prebuild App
         if: ${{ github.event.inputs.prebuild && github.event.inputs.key == steps.secret.outputs.secret }}
-        run: npm run prebuild
+        run: mkdir /tmp/app-build && mv ./* /tmp/app-build
 
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
