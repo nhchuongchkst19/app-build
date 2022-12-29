@@ -83,7 +83,7 @@ jobs:
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn install &&   git config --global user.email "you@example.com" && git config --global user.name "Your Name" && git add -A && git commit -m "change code"
+        run: yarn install && git config --global user.email "you@example.com" && git config --global user.name "Your Name" && git add -A && git commit -m "change code" && git status
 
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
