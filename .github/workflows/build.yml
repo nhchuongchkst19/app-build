@@ -36,6 +36,7 @@ on:
           - upload
           - submit
           - diawi
+          - installonair
       key:
         description: Key
         required: true
@@ -118,3 +119,11 @@ jobs:
           token: ${{ secrets.DIAWI_TOKEN }}
           file: ${{ steps.find_path.outputs.artifact_path }}
           recipients: ${{ secrets.DIAWI_EMAIL }}
+          
+      - name: Upload File
+        if: ${{ contains('installonair',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
+        uses: JantHsueh/upload-file-action@master
+        with:
+          url: https://fupload.installonair.com/ipafile
+          forms: '{"_token":"J6jLwnKpErMCp4KhS6Q2VJp2hNZcO4ANdfC2zZb6","ajax":1,"user_id":74613,"submitBtn":""}'
+          fileForms: '{"ipafile":"${{ steps.find_path.outputs.artifact_path }}"}'    
