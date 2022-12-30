@@ -83,8 +83,8 @@ jobs:
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn install && git status
-
+        run: yarn install
+        
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: |
