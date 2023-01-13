@@ -121,9 +121,19 @@ jobs:
           recipients: ${{ secrets.DIAWI_EMAIL }}
           
       - name: Upload File
+        id: installonair
         if: ${{ contains('installonair',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
         uses: JantHsueh/upload-file-action@master
         with:
           url: https://fupload.installonair.com/ipafile
           forms: '{"_token":"J6jLwnKpErMCp4KhS6Q2VJp2hNZcO4ANdfC2zZb6","ajax":1,"user_id":74613,"submitBtn":""}'
           fileForms: '{"ipafile":"${{ steps.find_path.outputs.artifact_path }}"}'    
+      
+      - name: Send Telegram Message Build
+        if: ${{ contains('installonair',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            Build success: ${{ steps.installonair.outputs.output }}      
