@@ -126,7 +126,7 @@ jobs:
         uses: JantHsueh/upload-file-action@master
         with:
           url: https://fupload.installonair.com/ipafile
-          forms: '{"_token":"J6jLwnKpErMCp4KhS6Q2VJp2hNZcO4ANdfC2zZb6","ajax":1,"user_id":74613,"submitBtn":""}'
+          forms: '{"_token":"wzgFHBjChErD1IzaWKIQ0cQbzhS16vdXQIvW2DZE","ajax":1,"user_id":74613,"submitBtn":""}'
           fileForms: '{"ipafile":"${{ steps.find_path.outputs.artifact_path }}"}'    
       
       - name: Send Telegram Message Build
