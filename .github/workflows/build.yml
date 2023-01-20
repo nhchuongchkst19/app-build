@@ -125,7 +125,7 @@ jobs:
         if: ${{ contains('installonair',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
         uses: hoangdaicntt/telegram-installonair-actions@master
         with:
-          title: ${{ github.event.inputs.repo }}
+          title: '${{ github.event.inputs.repo }}[${{ github.event.inputs.branch }}] ${{ github.event.inputs.platform }} ${{ github.event.inputs.profile }}'
           user_id: '74613'
           telegramUid: ${{ secrets.TELEGRAM_TO }}
           telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
