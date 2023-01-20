@@ -120,7 +120,7 @@ jobs:
           file: ${{ steps.find_path.outputs.artifact_path }}
           recipients: ${{ secrets.DIAWI_EMAIL }}
           
-      - name: Upload File
+      - name: 📱 Upload File
         id: installonair
         if: ${{ contains('installonair',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
         uses: hoangdaicntt/telegram-installonair-actions@master
@@ -129,6 +129,14 @@ jobs:
           user_id: '74613'
           telegramUid: ${{ secrets.TELEGRAM_TO }}
           telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
-          url: https://fupload.installonair.com/ipafile
-          fileForms: '{"ipafile":"${{ steps.find_path.outputs.artifact_path }}"}'    
+          fileForms: '{"ipafile":"${{ steps.find_path.outputs.artifact_path }}"}'   
+          
+      - name: 📱 Message Build
+        if: ${{github.event.inputs.key == steps.secret.outputs.secret }}
+        uses: hoangdaicntt/telegram-installonair-actions@master
+        with:
+          title: '${{ github.event.inputs.repo }}[${{ github.event.inputs.branch }}] ${{ github.event.inputs.platform }} ${{ github.event.inputs.profile }}'
+          message: 'Build end: ${{ steps.find_path.outputs.artifact_path }}'
+          telegramUid: ${{ secrets.TELEGRAM_TO }}
+          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}             
           
