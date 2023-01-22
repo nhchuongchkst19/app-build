@@ -80,11 +80,11 @@ jobs:
 
       - name: 🏗 Setup EAS local builds
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn global add eas-cli@3.3.2 eas-cli-local-build-plugin@0.0.127
+        run: yarn global add eas-cli-local-build-plugin@0.0.127
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn install
+        run: yarn install && yarn global add eas-cli@3.3.2
         
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
