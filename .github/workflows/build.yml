@@ -19,6 +19,7 @@ on:
         description: Build profile to use
         options:
           - development
+          - simulator
           - preview
           - production
       repo:
