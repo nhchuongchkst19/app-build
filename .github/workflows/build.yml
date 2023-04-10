@@ -55,6 +55,8 @@ jobs:
         
       - name: 🏗 Setup repo
         uses: actions/checkout@v2
+        with:
+          persist-credentials: false
 
       - name: 🏗 Clone code
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
