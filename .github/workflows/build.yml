@@ -66,14 +66,12 @@ jobs:
           REPO: ${{ github.event.inputs.repo }}
           BRANCH: ${{ github.event.inputs.branch }}
         run: rm -rf ./* && git clone --branch ${{ env.BRANCH }} --single-branch https://${{ env.GH_TOKEN }}@github.com/${{ env.USER }}/${{ env.REPO }}.git
-        no_log: true
 
       - name: 🏗 Move code
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         env:
           REPO: ${{ github.event.inputs.repo }}
         run: mv ./${{ env.REPO }}/* ./
-        no_log: true
 
 
       - name: 🏗 Setup Node
