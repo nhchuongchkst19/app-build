@@ -58,13 +58,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: 🏗 Clone code
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: rm -rf ./* && git clone --branch ${{ github.event.inputs.branch }} --single-branch https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ github.event.inputs.repo }}.git 
+    - name: 🏗 Clone code
+      if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        USER: ${{ secrets.USER }}
+        REPO: ${{ github.event.inputs.repo }}
+        BRANCH: ${{ github.event.inputs.branch }}
+      run: rm -rf ./* && git clone --branch ${{ env.BRANCH }} --single-branch https://${{ env.GH_TOKEN }}@github.com/${{ env.USER }}/${{ env.REPO }}.git
+      no_log: true
 
-      - name: 🏗 Move code
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: mv ./${{ github.event.inputs.repo }}/* ./
+    - name: 🏗 Move code
+      if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
+      env:
+        REPO: ${{ github.event.inputs.repo }}
+      run: mv ./${{ env.REPO }}/* ./
+      no_log: true
+
 
       - name: 🏗 Setup Node
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
