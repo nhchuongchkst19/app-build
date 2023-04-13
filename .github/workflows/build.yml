@@ -1,0 +1,22 @@
+name: Build App
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        type: choice
+        description: OS to build on
+        options:
+          - ubuntu
+
+  
+jobs:
+  build:
+    runs-on: ${{ github.event.inputs.os }}
+    strategy:
+      matrix:
+        node: [ 16.x ]
+    steps:
+      - name: Assign variable
+        id: secret
+        run: echo '::set-output name=secret::${{secrets.KEY}}'
+
