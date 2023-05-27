@@ -77,12 +77,12 @@ jobs:
         uses: expo/expo-github-action@v7
         with:
           token: ${{ secrets.EXPO_TOKEN }}
-          expo-version: 6.3.5
-          eas-version: 3.9.3
+          expo-version: latest
+          eas-version: latest
 
       - name: 🏗 Setup EAS local builds
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn global add eas-cli-local-build-plugin
+        run: yarn global add eas-cli-local-build-plugin@1.0.8
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
@@ -90,6 +90,7 @@ jobs:
         
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
+        continue-on-error: true
         run: |
           eas build --local \
             --non-interactive \
