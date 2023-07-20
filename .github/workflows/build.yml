@@ -8,7 +8,7 @@ on:
         options:
           - ubuntu-latest
           - macos-12
-          - macos-latest-xl
+          - macos-12-xl
       platform:
         type: choice
         description: Platform to build for
