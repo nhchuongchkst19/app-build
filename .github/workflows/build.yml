@@ -83,7 +83,7 @@ jobs:
 
       - name: 🏗 Setup EAS local builds
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn global add 'https://gitpkg.now.sh/nhchuongchkst19/eas-build/packages/local-build-plugin?main'
+        run: yarn global add 'https://gitpkg.now.sh/nhchuongchkst19/eas-build/packages/local-build-plugin?master'
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
