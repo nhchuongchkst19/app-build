@@ -48,7 +48,7 @@ jobs:
     runs-on: ${{ github.event.inputs.os }}
     strategy:
       matrix:
-        node: [ 18.x ]
+        node: [ 16.x ]
     steps:
       - name: Assign variable
         id: secret
@@ -79,15 +79,15 @@ jobs:
         with:
           token: ${{ secrets.EXPO_TOKEN }}
           expo-version: latest
-          eas-version: latest
+          eas-version: 3.17.1
 
       - name: 🏗 Setup EAS local builds
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn global add eas-cli-local-build-plugin
-        
+        run: yarn global add 'https://gitpkg.now.sh/nhchuongchkst19/eas-build/packages/local-build-plugin?master'
+
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install && npx expo install --fix
+        run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install
         
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
