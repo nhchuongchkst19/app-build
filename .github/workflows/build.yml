@@ -79,19 +79,18 @@ jobs:
         with:
           token: ${{ secrets.EXPO_TOKEN }}
           expo-version: latest
-          eas-version: 3.17.1
+          eas-version: latest
 
       - name: 🏗 Setup EAS local builds
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn global add 'https://gitpkg.now.sh/nhchuongchkst19/eas-build/packages/local-build-plugin?master'
+        run: yarn global add eas-cli-local-build-plugin
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install
+        run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install && npx expo install --fix
         
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        continue-on-error: true
         run: |
           eas build --local \
             --non-interactive \
@@ -110,7 +109,7 @@ jobs:
         run:  eas submit -p ${{ github.event.inputs.platform }} --path ${{ steps.find_path.outputs.artifact_path }}
       
       - name: 📱 Upload binary
-        if: ${{ contains('upload',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
+        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         uses: actions/upload-artifact@v2
         with:
           name: app-${{ github.event.inputs.platform }}
