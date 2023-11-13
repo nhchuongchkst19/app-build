@@ -65,7 +65,11 @@ jobs:
 
       - name: 🏗 Move code
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: mv ./${{ github.event.inputs.repo }}/* ./  && mv ./${{ github.event.inputs.repo }}/.env ./
+        run: |
+            mv ./${{ github.event.inputs.repo }}/* ./
+            if [ -e ./${{ github.event.inputs.repo }}/.env ]; then
+              mv ./${{ github.event.inputs.repo }}/.env ./
+            fi
 
       - name: 🏗 Setup Node
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
