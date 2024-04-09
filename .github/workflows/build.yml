@@ -76,7 +76,7 @@ jobs:
         run: |
           echo "//github.com/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GHUB_TOKEN }}
 
       - name: 🏗 Setup Expo and EAS
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
