@@ -55,6 +55,8 @@ jobs:
         
       - name: 🏗 Setup repo
         uses: actions/checkout@v2
+        with:
+          persist-credentials: false
 
       - name: 🏗 Clone code
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
@@ -72,10 +74,10 @@ jobs:
 
       - name: Create .npmrc file
         run: |
-          echo "@${{ secrets.USER }}:registry=https://npm.pkg.github.com/" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> .npmrc
+          echo "@${{ secrets.USER }}:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GHUB_TOKEN }}
 
       - name: 🏗 Setup Expo and EAS
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
