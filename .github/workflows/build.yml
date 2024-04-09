@@ -41,7 +41,11 @@ on:
       key:
         description: Key
         required: true
-  
+
+env:
+  GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
+
+
 jobs:
   build:
     runs-on: ${{ github.event.inputs.os }}
@@ -87,8 +91,6 @@ jobs:
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install && npx expo install --fix
-        env:
-          GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
 
       - name: Change cocoapods version
         if: ${{ contains('macos-12',github.event.inputs.os) }}
