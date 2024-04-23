@@ -56,6 +56,10 @@ jobs:
       - name: Assign variable
         id: secret
         run: echo '::set-output name=secret::${{secrets.KEY}}'
+
+      - name: Set JAVA_HOME to Java 17
+        if: ${{ github.event.inputs.os == 'android' }}
+        run: echo "JAVA_HOME=${{ env.JAVA_HOME_17_X64 }}" >> $GITHUB_ENV
         
       - name: 🏗 Setup repo
         uses: actions/checkout@v2
