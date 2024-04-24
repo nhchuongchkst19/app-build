@@ -126,7 +126,7 @@ jobs:
 
       - name: 📱 Upload binary
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: app-${{ github.event.inputs.platform }}
           path: ${{ steps.find_path.outputs.artifact_path }}
