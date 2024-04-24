@@ -9,6 +9,7 @@ on:
           - ubuntu-latest
           - macos-latest
           - macos-13
+          - macos-12
       platform:
         type: choice
         description: Platform to build for
