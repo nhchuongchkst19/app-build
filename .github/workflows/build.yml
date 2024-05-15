@@ -95,15 +95,11 @@ jobs:
 
       - name: 🏗 Setup EAS local builds
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn global add eas-cli-local-build-plugin
+        run: yarn global add 'https://gitpkg.now.sh/nhchuongchkst19/eas-build/packages/local-build-plugin?v1.0.108'
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install && npx expo install --fix
-
-      - name: Change cocoapods version
-        if: ${{ contains('macos-12',github.event.inputs.os) }}
-        run: ruby -v && pod --version && gem uninstall cocoapods --all --force && gem install cocoapods -v 1.14.3 && pod --version
 
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
