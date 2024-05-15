@@ -95,11 +95,15 @@ jobs:
 
       - name: 🏗 Setup EAS local builds
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn global add eas-cli-local-build-plugin@1.0.107
+        run: yarn global add eas-cli-local-build-plugin
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install && npx expo install --fix
+
+      - name: Set Xcode version
+        if: ${{ contains('macos-13',github.event.inputs.os) }}
+        run: sudo xcode-select -switch /Applications/Xcode_15.2.app
 
       - name: 👷 Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
