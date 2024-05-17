@@ -23,6 +23,7 @@ on:
           - development
           - simulator
           - preview
+          - testflight
           - production
       repo:
         description: 'Repository name'
