@@ -102,7 +102,11 @@ jobs:
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install && npx expo install --fix
 
-      - name: 👷 Build app
+      - name: ☑️ Pre-build script
+        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
+        run: npx -y hd-app-scripts --prebuild
+
+      - name: ⚙ Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: |
           eas build --local \
@@ -110,14 +114,14 @@ jobs:
             --platform=${{ github.event.inputs.platform }} \
             --profile=${{ github.event.inputs.profile }}
 
-      - name: Find path
+      - name: 👀 Find path
         id: find_path
         run: echo "::set-output name=artifact_path::$(echo $(find . -type f -name 'build-*.*' -maxdepth 1))"
 
-      - name: Show path
+      - name: ♨️ Show path
         run: echo ${{ steps.find_path.outputs.artifact_path }}
 
-      - name: Submit app
+      - name: 🕖 Submit app
         if: ${{ contains('submit',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
         run: eas submit -p ${{ github.event.inputs.platform }} --path ${{ steps.find_path.outputs.artifact_path }}
 
