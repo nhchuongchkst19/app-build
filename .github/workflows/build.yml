@@ -3,13 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       os:
-        type: choice
         description: OS to build on. Ubuntu is faster, MacOS supports iOS builds, Windows is unsupported
-        options:
-          - ubuntu-latest
-          - macos-latest
-          - macos-13
-          - macos-12
       platform:
         type: choice
         description: Platform to build for
