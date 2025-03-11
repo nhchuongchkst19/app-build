@@ -77,7 +77,7 @@ jobs:
 
       - name: 🏗 Setup Node
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
 
@@ -122,7 +122,7 @@ jobs:
 
       - name: 📱 Upload binary
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: app-${{ github.event.inputs.platform }}
           path: ${{ steps.find_path.outputs.artifact_path }}
