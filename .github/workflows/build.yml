@@ -42,27 +42,28 @@ on:
 env:
   GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
 
-
 jobs:
   build:
     runs-on: ${{ github.event.inputs.os }}
     strategy:
       matrix:
-        node: [ 18.x ]
+        # Upgrade Node.js version to 20.x
+        node: [ 20.x ]
     steps:
       - name: Assign variable
         id: secret
         run: echo '::set-output name=secret::${{secrets.KEY}}'
 
-      - name: Set Java 17
+      - name: Set Java 19
+        # Upgrade actions/setup-java version to v3 and Java version to 19
         uses: actions/setup-java@v3
         if: ${{ github.event.inputs.os == 'ubuntu-latest' }}
         with:
-          java-version: '17'
+          java-version: '19'
           distribution: 'temurin'
 
       - name: 🏗 Setup repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           persist-credentials: false
 
@@ -76,13 +77,13 @@ jobs:
 
       - name: 🏗 Setup Node
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node }}
 
       - name: 🏗 Setup Expo and EAS
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: expo/expo-github-action@v7
+        uses: expo/expo-github-action@v8
         with:
           token: ${{ secrets.EXPO_TOKEN }}
           expo-version: latest
@@ -121,7 +122,7 @@ jobs:
 
       - name: 📱 Upload binary
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: app-${{ github.event.inputs.platform }}
           path: ${{ steps.find_path.outputs.artifact_path }}
@@ -153,4 +154,3 @@ jobs:
           message: 'Build end: ${{ steps.find_path.outputs.artifact_path }}'
           telegramUid: ${{ secrets.TELEGRAM_TO }}
           telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
-
