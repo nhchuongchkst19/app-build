@@ -54,14 +54,6 @@ jobs:
         id: secret
         run: echo '::set-output name=secret::${{secrets.KEY}}'
 
-      - name: Set Java 19
-        # Upgrade actions/setup-java version to v3 and Java version to 19
-        uses: actions/setup-java@v3
-        if: ${{ github.event.inputs.os == 'ubuntu-latest' }}
-        with:
-          java-version: '19'
-          distribution: 'temurin'
-
       - name: 🏗 Setup repo
         uses: actions/checkout@v3
         with:
