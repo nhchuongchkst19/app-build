@@ -137,20 +137,38 @@ jobs:
       - name: 📱 Upload File
         id: installonair
         if: ${{ contains('installonair',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: hoangdaicntt/telegram-installonair-actions@master
+        uses: hoangdaicntt/telegram-installonair-actions@main
         with:
-          title: '${{ github.event.inputs.repo }}[${{ github.event.inputs.branch }}] ${{ github.event.inputs.platform }} ${{ github.event.inputs.profile }}'
-          user_id: '74613'
+          messageTitle: '${{ github.event.inputs.repo }}[${{ github.event.inputs.branch }}] ${{ github.event.inputs.platform }} ${{ github.event.inputs.profile }}'
+          installonairUserId: '74613'
           telegramUid: ${{ secrets.TELEGRAM_TO }}
           telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
-          fileForms: '{"ipafile":"${{ steps.find_path.outputs.artifact_path }}"}'
+          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
+          filePath: ${{ steps.find_path.outputs.artifact_path }}
+          method: 'all'
+
+      - name: 📱 Upload File
+        id: loadlyio
+        if: ${{ contains('loadlyio',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
+        uses: hoangdaicntt/telegram-installonair-actions@main
+        with:
+          messageTitle: '${{ github.event.inputs.repo }}[${{ github.event.inputs.branch }}] ${{ github.event.inputs.platform }} ${{ github.event.inputs.profile }}'
+          installonairUserId: '74613'
+          telegramUid: ${{ secrets.TELEGRAM_TO }}
+          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
+          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
+          filePath: ${{ steps.find_path.outputs.artifact_path }}
+          method: 'loadlyio-build'
 
       - name: 📱 Message Build
         if: ${{ contains('submit',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: hoangdaicntt/telegram-installonair-actions@master
+        uses: hoangdaicntt/telegram-installonair-actions@main
         with:
-          title: '${{ github.event.inputs.repo }}[${{ github.event.inputs.branch }}] ${{ github.event.inputs.platform }} ${{ github.event.inputs.profile }}'
-          message: 'Build end: ${{ steps.find_path.outputs.artifact_path }}'
+          messageTitle: '${{ github.event.inputs.repo }}[${{ github.event.inputs.branch }}] ${{ github.event.inputs.platform }} ${{ github.event.inputs.profile }}'
+          installonairUserId: '74613'
           telegramUid: ${{ secrets.TELEGRAM_TO }}
           telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
+          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
+          filePath: ${{ steps.find_path.outputs.artifact_path }}
+          method: 'send-only'
 
