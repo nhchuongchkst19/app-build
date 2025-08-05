@@ -35,6 +35,7 @@ on:
           - submit
           - diawi
           - installonair
+          - loadlyio
       key:
         description: Key
         required: true
