@@ -86,6 +86,13 @@ jobs:
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: yarn global add eas-cli-local-build-plugin
 
+      - name: 🍎 Download iOS Platform (macOS only)
+        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'ios' && runner.os == 'macOS' }}
+        run: |
+          echo "Downloading iOS platform to fix SDK missing issue..."
+          sudo xcodebuild -downloadPlatform iOS
+          echo "iOS platform download completed"
+
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install && npx expo install --fix
@@ -165,4 +172,3 @@ jobs:
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
           filePath: ${{ steps.find_path.outputs.artifact_path }}
           method: 'send-only'
-
