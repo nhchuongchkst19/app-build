@@ -101,6 +101,20 @@ jobs:
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: npx -y hd-app-scripts --prebuild
 
+      - name: 🔧 Configure Global Gradle Settings
+        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'android' }}
+        run: |
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx14g -XX:MaxMetaspaceSize=2048m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
+          org.gradle.parallel=true
+          org.gradle.configureondemand=true
+          org.gradle.daemon=false
+          org.gradle.caching=true
+          EOF
+          echo "Global Gradle configuration created at ~/.gradle/gradle.properties"
+          cat ~/.gradle/gradle.properties
+
       - name: ⚙ Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: |
