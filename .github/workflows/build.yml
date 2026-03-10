@@ -130,16 +130,17 @@ jobs:
       - name: ♨️ Show path
         run: echo ${{ steps.find_path.outputs.artifact_path }}
 
-      - name: 🕖 Submit app
-        if: ${{ contains('submit',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
-        run: eas submit -p ${{ github.event.inputs.platform }} --path ${{ steps.find_path.outputs.artifact_path }}
-
       - name: 📱 Upload binary
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         uses: actions/upload-artifact@v4
         with:
           name: app-${{ github.event.inputs.platform }}
           path: ${{ steps.find_path.outputs.artifact_path }}
+
+      - name: 🕖 Submit app
+        if: ${{ contains('submit',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
+        run: eas submit -p ${{ github.event.inputs.platform }} --path ${{ steps.find_path.outputs.artifact_path }}
+          
 
       - name: 📱 Upload diawi
         if: ${{ contains('diawi',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
