@@ -1,4 +1,5 @@
 name: Build App
+run-name: ${{ github.event.inputs.os }} | ${{ github.event.inputs.platform }} | ${{ github.event.inputs.profile }} | ${{ github.event.inputs.repo }} | ${{ github.event.inputs.branch }} | ${{ github.event.inputs.artifact }}
 on:
   workflow_dispatch:
     inputs:
