@@ -34,8 +34,6 @@ on:
           - none
           - upload
           - submit
-          - diawi
-          - installonair
           - loadlyio
       key:
         description: Key
@@ -87,13 +85,6 @@ jobs:
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: yarn global add eas-cli-local-build-plugin
 
-      - name: 🍎 Download iOS Platform (macOS only)
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'ios' && runner.os == 'macOS' }}
-        run: |
-          echo "Downloading iOS platform to fix SDK missing issue..."
-          sudo xcode-select --switch /Applications/Xcode_16.4.app
-          echo "iOS platform download completed"
-
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install && npx expo install --fix
@@ -101,20 +92,6 @@ jobs:
       - name: ☑️ Pre-build script
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: npx -y hd-app-scripts --prebuild
-
-      - name: 🔧 Configure Global Gradle Settings
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'android' }}
-        run: |
-          mkdir -p ~/.gradle
-          cat > ~/.gradle/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx14g -XX:MaxMetaspaceSize=2048m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
-          org.gradle.parallel=true
-          org.gradle.configureondemand=true
-          org.gradle.daemon=false
-          org.gradle.caching=true
-          EOF
-          echo "Global Gradle configuration created at ~/.gradle/gradle.properties"
-          cat ~/.gradle/gradle.properties
 
       - name: ⚙ Build app
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
@@ -141,28 +118,6 @@ jobs:
       - name: 🕖 Submit app
         if: ${{ contains('submit',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
         run: eas submit -p ${{ github.event.inputs.platform }} --path ${{ steps.find_path.outputs.artifact_path }}
-          
-
-      - name: 📱 Upload diawi
-        if: ${{ contains('diawi',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: rnkdsh/action-upload-diawi@v1.2.7
-        with:
-          token: ${{ secrets.DIAWI_TOKEN }}
-          file: ${{ steps.find_path.outputs.artifact_path }}
-          recipients: ${{ secrets.DIAWI_EMAIL }}
-
-      - name: 📱 Upload File
-        id: installonair
-        if: ${{ contains('installonair',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: hoangdaicntt/telegram-installonair-actions@main
-        with:
-          messageTitle: '${{ github.event.inputs.repo }}[${{ github.event.inputs.branch }}] ${{ github.event.inputs.platform }} ${{ github.event.inputs.profile }}'
-          installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
-          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
-          filePath: ${{ steps.find_path.outputs.artifact_path }}
-          method: 'all'
 
       - name: 📱 Upload File
         id: loadlyio
