@@ -85,12 +85,6 @@ jobs:
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         run: yarn global add eas-cli-local-build-plugin
 
-      - name: 🍎 Download iOS Platform (macOS only)
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'ios' && runner.os == 'macOS' }}
-        run: |
-          echo "Downloading iOS platform to fix SDK missing issue..."
-          sudo xcode-select --switch /Applications/Xcode_16.4.app
-          echo "iOS platform download completed"
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
