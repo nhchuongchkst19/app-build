@@ -48,7 +48,7 @@ jobs:
     strategy:
       matrix:
         # Upgrade Node.js version to 20.x
-        node: [ 20.x ]
+        node: [ 24.x ]
     steps:
       - name: Assign variable
         id: secret
