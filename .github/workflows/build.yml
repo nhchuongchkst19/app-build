@@ -88,7 +88,6 @@ jobs:
         uses: expo/expo-github-action@v8
         with:
           token: ${{ secrets.EXPO_TOKEN }}
-          expo-version: 57.0.4
           eas-version: 21.0.0
 
       - name: 🏗 Setup EAS local builds
