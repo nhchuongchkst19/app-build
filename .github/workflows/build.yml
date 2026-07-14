@@ -52,7 +52,7 @@ jobs:
     steps:
       - name: Assign variable
         id: secret
-        run: echo '::set-output name=secret::${{secrets.KEY}}'
+        run: echo 'secret=${{secrets.KEY}}' >> "$GITHUB_OUTPUT"
 
       - name: 🏗 Setup repo
         uses: actions/checkout@v3
@@ -65,7 +65,10 @@ jobs:
 
       - name: 🏗 Move code
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: mv ./${{ github.event.inputs.repo }}/* ./
+        shell: bash
+        run: |
+          shopt -s dotglob nullglob
+          mv ./${{ github.event.inputs.repo }}/* ./
 
       - name: 🏗 Setup Node
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
@@ -78,17 +81,36 @@ jobs:
         uses: expo/expo-github-action@v8
         with:
           token: ${{ secrets.EXPO_TOKEN }}
-          expo-version: latest
-          eas-version: latest
+          expo-version: 57.0.4
+          eas-version: 21.0.0
 
       - name: 🏗 Setup EAS local builds
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn global add eas-cli-local-build-plugin
+        run: yarn global add eas-cli-local-build-plugin@21.0.0
 
 
       - name: 📦 Install dependencies
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: rm -rf yarn.lock && rm -rf package-lock.json && yarn install && npx expo install --fix
+        shell: bash
+        run: |
+          corepack enable
+          if [[ -f yarn.lock ]]; then
+            yarn install --frozen-lockfile
+            PACKAGE_MANAGER=yarn
+          elif [[ -f package-lock.json ]]; then
+            npm ci
+            PACKAGE_MANAGER=npm
+          else
+            echo "A committed lockfile is required for reproducible builds." >&2
+            exit 1
+          fi
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['verify:versions'] ? 0 : 1)"; then
+            if [[ "$PACKAGE_MANAGER" == "yarn" ]]; then
+              yarn verify:versions
+            else
+              npm run verify:versions
+            fi
+          fi
 
       - name: ☑️ Pre-build script
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
@@ -118,7 +140,7 @@ jobs:
 
       - name: 👀 Find path
         id: find_path
-        run: echo "::set-output name=artifact_path::$(echo $(find . -type f -name 'build-*.*' -maxdepth 1))"
+        run: echo "artifact_path=$(echo $(find . -maxdepth 1 -type f -name 'build-*.*'))" >> "$GITHUB_OUTPUT"
 
       - name: ♨️ Show path
         run: echo ${{ steps.find_path.outputs.artifact_path }}
