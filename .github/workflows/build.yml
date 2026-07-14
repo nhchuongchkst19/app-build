@@ -68,7 +68,14 @@ jobs:
         shell: bash
         run: |
           shopt -s dotglob nullglob
-          mv ./${{ github.event.inputs.repo }}/* ./
+          for path in ./${{ github.event.inputs.repo }}/*; do
+            name="$(basename "$path")"
+            if [[ "$name" == ".git" ]]; then
+              continue
+            fi
+            mv "$path" ./
+          done
+          rm -rf ./${{ github.event.inputs.repo }}
 
       - name: 🏗 Setup Node
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
