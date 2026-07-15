@@ -108,6 +108,30 @@ jobs:
             ${{ runner.os }}-android-gradle-${{ github.event.inputs.repo }}-
             ${{ runner.os }}-android-gradle-
 
+      - name: ♻️ Restore iOS JS dependency cache
+        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'ios' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/yarn
+            ~/.npm
+          key: ${{ runner.os }}-ios-js-${{ github.event.inputs.repo }}-${{ hashFiles('yarn.lock', 'package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-ios-js-${{ github.event.inputs.repo }}-
+            ${{ runner.os }}-ios-js-
+
+      - name: ♻️ Restore iOS CocoaPods cache
+        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'ios' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods/repos
+          key: ${{ runner.os }}-ios-pods-${{ github.event.inputs.repo }}-${{ hashFiles('yarn.lock', 'package-lock.json', 'ios/Podfile.lock', 'eas.json', 'app.json', 'app.config.*') }}
+          restore-keys: |
+            ${{ runner.os }}-ios-pods-${{ github.event.inputs.repo }}-
+            ${{ runner.os }}-ios-pods-
+
       - name: 🏗 Setup Expo and EAS
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         uses: expo/expo-github-action@v8
