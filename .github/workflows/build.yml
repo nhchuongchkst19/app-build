@@ -83,6 +83,31 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      - name: ♻️ Restore Android JS dependency cache
+        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'android' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/yarn
+            ~/.npm
+          key: ${{ runner.os }}-android-js-${{ github.event.inputs.repo }}-${{ hashFiles('yarn.lock', 'package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-android-js-${{ github.event.inputs.repo }}-
+            ${{ runner.os }}-android-js-
+
+      - name: ♻️ Restore Android Gradle cache
+        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'android' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/caches/build-cache-1
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-android-gradle-${{ github.event.inputs.repo }}-${{ hashFiles('yarn.lock', 'package-lock.json', 'eas.json', 'app.json', 'app.config.*', 'plugins/**', 'modules/**/android/**') }}
+          restore-keys: |
+            ${{ runner.os }}-android-gradle-${{ github.event.inputs.repo }}-
+            ${{ runner.os }}-android-gradle-
+
       - name: 🏗 Setup Expo and EAS
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
         uses: expo/expo-github-action@v8
