@@ -150,6 +150,28 @@ jobs:
       - name: Setup EAS CLI
         run: npm install --global eas-cli@21.0.0
 
+      - name: Install project dependencies
+        shell: bash
+        working-directory: app
+        run: |
+          if [[ -f pnpm-lock.yaml ]]; then
+            pnpm install --frozen-lockfile --prefer-offline
+          elif [[ -f yarn.lock ]]; then
+            yarn install --frozen-lockfile --prefer-offline
+          else
+            npm ci --prefer-offline
+          fi
+
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['verify:versions'] ? 0 : 1)"; then
+            if [[ -f pnpm-lock.yaml ]]; then
+              pnpm run verify:versions
+            elif [[ -f yarn.lock ]]; then
+              yarn run verify:versions
+            else
+              npm run verify:versions
+            fi
+          fi
+
       - name: Setup Gradle
         if: ${{ inputs.platform == 'android' }}
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.1.0
