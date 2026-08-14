@@ -90,7 +90,8 @@ jobs:
           path: |
             ~/.cache/yarn
             ~/.npm
-          key: ${{ runner.os }}-android-js-${{ github.event.inputs.repo }}-${{ hashFiles('yarn.lock', 'package-lock.json') }}
+            ~/.pnpm-store
+          key: ${{ runner.os }}-android-js-${{ github.event.inputs.repo }}-${{ hashFiles('pnpm-lock.yaml', 'yarn.lock', 'package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-android-js-${{ github.event.inputs.repo }}-
             ${{ runner.os }}-android-js-
@@ -103,7 +104,7 @@ jobs:
             ~/.gradle/caches/modules-2
             ~/.gradle/caches/build-cache-1
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-android-gradle-${{ github.event.inputs.repo }}-${{ hashFiles('yarn.lock', 'package-lock.json', 'eas.json', 'app.json', 'app.config.*', 'plugins/**', 'modules/**/android/**') }}
+          key: ${{ runner.os }}-android-gradle-${{ github.event.inputs.repo }}-${{ hashFiles('pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'eas.json', 'app.json', 'app.config.*', 'plugins/**', 'modules/**/android/**') }}
           restore-keys: |
             ${{ runner.os }}-android-gradle-${{ github.event.inputs.repo }}-
             ${{ runner.os }}-android-gradle-
@@ -115,7 +116,8 @@ jobs:
           path: |
             ~/.cache/yarn
             ~/.npm
-          key: ${{ runner.os }}-ios-js-${{ github.event.inputs.repo }}-${{ hashFiles('yarn.lock', 'package-lock.json') }}
+            ~/.pnpm-store
+          key: ${{ runner.os }}-ios-js-${{ github.event.inputs.repo }}-${{ hashFiles('pnpm-lock.yaml', 'yarn.lock', 'package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-ios-js-${{ github.event.inputs.repo }}-
             ${{ runner.os }}-ios-js-
@@ -127,7 +129,7 @@ jobs:
           path: |
             ~/Library/Caches/CocoaPods
             ~/.cocoapods/repos
-          key: ${{ runner.os }}-ios-pods-${{ github.event.inputs.repo }}-${{ hashFiles('yarn.lock', 'package-lock.json', 'ios/Podfile.lock', 'eas.json', 'app.json', 'app.config.*') }}
+          key: ${{ runner.os }}-ios-pods-${{ github.event.inputs.repo }}-${{ hashFiles('pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'ios/Podfile.lock', 'eas.json', 'app.json', 'app.config.*') }}
           restore-keys: |
             ${{ runner.os }}-ios-pods-${{ github.event.inputs.repo }}-
             ${{ runner.os }}-ios-pods-
@@ -138,10 +140,11 @@ jobs:
         with:
           token: ${{ secrets.EXPO_TOKEN }}
           eas-version: 21.0.0
+          packager: npm
 
       - name: 🏗 Setup EAS local builds
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: yarn global add eas-cli-local-build-plugin@21.0.0
+        run: npm install --global eas-cli-local-build-plugin@21.0.0
 
 
       - name: 📦 Install dependencies
@@ -149,7 +152,10 @@ jobs:
         shell: bash
         run: |
           corepack enable
-          if [[ -f yarn.lock ]]; then
+          if [[ -f pnpm-lock.yaml ]]; then
+            pnpm install --frozen-lockfile
+            PACKAGE_MANAGER=pnpm
+          elif [[ -f yarn.lock ]]; then
             yarn install --frozen-lockfile
             PACKAGE_MANAGER=yarn
           elif [[ -f package-lock.json ]]; then
@@ -160,16 +166,12 @@ jobs:
             exit 1
           fi
           if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['verify:versions'] ? 0 : 1)"; then
-            if [[ "$PACKAGE_MANAGER" == "yarn" ]]; then
-              yarn verify:versions
-            else
-              npm run verify:versions
-            fi
+            "$PACKAGE_MANAGER" run verify:versions
           fi
 
       - name: ☑️ Pre-build script
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: npx -y hd-app-scripts --prebuild
+        run: node .github/scripts/update-app-version.cjs
 
       - name: 🔧 Configure Global Gradle Settings
         if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'android' }}
