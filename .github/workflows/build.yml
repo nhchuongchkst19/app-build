@@ -1,19 +1,30 @@
 name: Build App
-run-name: ${{ github.event.inputs.os }} | ${{ github.event.inputs.platform }} | ${{ github.event.inputs.profile }} | ${{ github.event.inputs.repo }} | ${{ github.event.inputs.branch }} | ${{ github.event.inputs.artifact }}
+run-name: ${{ inputs.os }} | ${{ inputs.platform }} | ${{ inputs.profile }} | ${{ inputs.repo }} | ${{ inputs.branch }} | ${{ inputs.artifact }}
+
 on:
   workflow_dispatch:
     inputs:
       os:
-        description: OS to build on. Ubuntu is faster, MacOS supports iOS builds, Windows is unsupported
+        type: choice
+        description: Runner image (iOS requires macos-26)
+        required: true
+        default: ubuntu-latest
+        options:
+          - ubuntu-latest
+          - macos-26
       platform:
         type: choice
-        description: Platform to build for
+        description: Platform to build
+        required: true
+        default: android
         options:
           - android
           - ios
       profile:
         type: choice
-        description: Build profile to use
+        description: EAS build profile
+        required: true
+        default: development
         options:
           - development
           - simulator
@@ -21,219 +32,243 @@ on:
           - testflight
           - production
       repo:
-        description: 'Repository name'
+        type: string
+        description: App repository name
         required: true
       branch:
-        description: 'Branch name'
+        type: string
+        description: App branch, tag, or commit SHA
+        required: true
         default: master
-
       artifact:
         type: choice
-        description: Artifact
+        description: Post-build action
+        required: true
+        default: upload
         options:
           - none
           - upload
           - submit
           - loadlyio
       key:
-        description: Key
+        type: string
+        description: Shared build access key
         required: true
 
-env:
-  GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
+permissions:
+  contents: read
+
+concurrency:
+  group: app-build-${{ inputs.repo }}-${{ inputs.branch }}-${{ inputs.platform }}-${{ inputs.profile }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: ${{ github.event.inputs.os }}
-    strategy:
-      matrix:
-        # Upgrade Node.js version to 20.x
-        node: [ 24.x ]
-    steps:
-      - name: Assign variable
-        id: secret
-        run: echo 'secret=${{secrets.KEY}}' >> "$GITHUB_OUTPUT"
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 120
 
-      - name: 🏗 Setup repo
-        uses: actions/checkout@v3
+    steps:
+      - name: Validate authorization and build inputs
+        shell: bash
+        env:
+          PROVIDED_KEY: ${{ inputs.key }}
+          EXPECTED_KEY: ${{ secrets.KEY }}
+          BUILD_OS: ${{ inputs.os }}
+          BUILD_PLATFORM: ${{ inputs.platform }}
+          APP_REPO: ${{ inputs.repo }}
+        run: |
+          if [[ -z "$EXPECTED_KEY" ]]; then
+            echo "Repository secret KEY is not configured." >&2
+            exit 1
+          fi
+
+          if [[ "$PROVIDED_KEY" != "$EXPECTED_KEY" ]]; then
+            echo "Invalid build access key." >&2
+            exit 1
+          fi
+
+          if [[ ! "$APP_REPO" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Invalid repository name: $APP_REPO" >&2
+            exit 1
+          fi
+
+          if [[ "$BUILD_PLATFORM" == "ios" && "$BUILD_OS" != "macos-26" ]]; then
+            echo "iOS builds require the macos-26 runner." >&2
+            exit 1
+          fi
+
+      - name: Checkout build tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          path: builder
           persist-credentials: false
 
-      - name: 🏗 Clone code
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: rm -rf ./* && git clone --branch ${{ github.event.inputs.branch }} --single-branch https://${{ secrets.GH_TOKEN }}@github.com/${{ secrets.USER }}/${{ github.event.inputs.repo }}.git
+      - name: Checkout app source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ secrets.USER }}/${{ inputs.repo }}
+          ref: ${{ inputs.branch }}
+          token: ${{ secrets.GH_TOKEN }}
+          path: app
+          fetch-depth: 1
+          persist-credentials: false
 
-      - name: 🏗 Move code
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+
+      - name: Configure project package manager
         shell: bash
+        working-directory: app
         run: |
-          shopt -s dotglob nullglob
-          for path in ./${{ github.event.inputs.repo }}/*; do
-            name="$(basename "$path")"
-            if [[ "$name" == ".git" ]]; then
-              continue
-            fi
-            mv "$path" ./
-          done
-          rm -rf ./${{ github.event.inputs.repo }}
+          corepack enable
 
-      - name: 🏗 Setup Node
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: actions/setup-node@v4
+          lockfile_count=0
+          package_manager=""
+
+          if [[ -f pnpm-lock.yaml ]]; then
+            package_manager="pnpm"
+            ((lockfile_count += 1))
+          fi
+          if [[ -f yarn.lock ]]; then
+            package_manager="yarn"
+            ((lockfile_count += 1))
+          fi
+          if [[ -f package-lock.json ]]; then
+            package_manager="npm"
+            ((lockfile_count += 1))
+          fi
+
+          if [[ "$lockfile_count" -ne 1 ]]; then
+            echo "Expected exactly one committed lockfile; found $lockfile_count." >&2
+            exit 1
+          fi
+
+          echo "Using $package_manager from the committed lockfile."
+
+      - name: Setup EAS CLI
+        run: npm install --global eas-cli@21.0.0
+
+      - name: Setup Gradle
+        if: ${{ inputs.platform == 'android' }}
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.1.0
         with:
-          node-version: ${{ matrix.node }}
+          cache-provider: basic
+          cache-disabled: ${{ !github.event.repository.private }}
+          add-job-summary: on-failure
 
-      - name: ♻️ Restore Android JS dependency cache
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'android' }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/yarn
-            ~/.npm
-            ~/.pnpm-store
-          key: ${{ runner.os }}-android-js-${{ github.event.inputs.repo }}-${{ hashFiles('pnpm-lock.yaml', 'yarn.lock', 'package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-android-js-${{ github.event.inputs.repo }}-
-            ${{ runner.os }}-android-js-
-
-      - name: ♻️ Restore Android Gradle cache
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'android' }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches/modules-2
-            ~/.gradle/caches/build-cache-1
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-android-gradle-${{ github.event.inputs.repo }}-${{ hashFiles('pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'eas.json', 'app.json', 'app.config.*', 'plugins/**', 'modules/**/android/**') }}
-          restore-keys: |
-            ${{ runner.os }}-android-gradle-${{ github.event.inputs.repo }}-
-            ${{ runner.os }}-android-gradle-
-
-      - name: ♻️ Restore iOS JS dependency cache
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'ios' }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/yarn
-            ~/.npm
-            ~/.pnpm-store
-          key: ${{ runner.os }}-ios-js-${{ github.event.inputs.repo }}-${{ hashFiles('pnpm-lock.yaml', 'yarn.lock', 'package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-ios-js-${{ github.event.inputs.repo }}-
-            ${{ runner.os }}-ios-js-
-
-      - name: ♻️ Restore iOS CocoaPods cache
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'ios' }}
-        uses: actions/cache@v4
+      - name: Restore CocoaPods cache
+        if: ${{ inputs.platform == 'ios' && github.event.repository.private }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/Library/Caches/CocoaPods
             ~/.cocoapods/repos
-          key: ${{ runner.os }}-ios-pods-${{ github.event.inputs.repo }}-${{ hashFiles('pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'ios/Podfile.lock', 'eas.json', 'app.json', 'app.config.*') }}
+          key: ${{ runner.os }}-ios-pods-${{ inputs.repo }}-${{ hashFiles('app/pnpm-lock.yaml', 'app/yarn.lock', 'app/package-lock.json', 'app/ios/Podfile.lock', 'app/eas.json', 'app/app.json', 'app/app.config.*') }}
           restore-keys: |
-            ${{ runner.os }}-ios-pods-${{ github.event.inputs.repo }}-
-            ${{ runner.os }}-ios-pods-
+            ${{ runner.os }}-ios-pods-${{ inputs.repo }}-
 
-      - name: 🏗 Setup Expo and EAS
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: expo/expo-github-action@v8
-        with:
-          token: ${{ secrets.EXPO_TOKEN }}
-          eas-version: 21.0.0
-          packager: npm
+      - name: Update native build version
+        env:
+          BUILD_PLATFORM: ${{ inputs.platform }}
+        run: node builder/.github/scripts/update-app-version.cjs app
 
-      - name: 🏗 Setup EAS local builds
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: npm install --global eas-cli-local-build-plugin@21.0.0
-
-
-      - name: 📦 Install dependencies
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
+      - name: Configure Gradle memory
+        if: ${{ inputs.platform == 'android' }}
         shell: bash
         run: |
-          corepack enable
-          if [[ -f pnpm-lock.yaml ]]; then
-            pnpm install --frozen-lockfile
-            PACKAGE_MANAGER=pnpm
-          elif [[ -f yarn.lock ]]; then
-            yarn install --frozen-lockfile
-            PACKAGE_MANAGER=yarn
-          elif [[ -f package-lock.json ]]; then
-            npm ci
-            PACKAGE_MANAGER=npm
-          else
-            echo "A committed lockfile is required for reproducible builds." >&2
-            exit 1
-          fi
-          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['verify:versions'] ? 0 : 1)"; then
-            "$PACKAGE_MANAGER" run verify:versions
-          fi
+          mkdir -p "$HOME/.gradle"
+          {
+            echo 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8'
+            echo 'org.gradle.parallel=true'
+            echo 'org.gradle.daemon=false'
+            echo 'org.gradle.caching=true'
+          } > "$HOME/.gradle/gradle.properties"
 
-      - name: ☑️ Pre-build script
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: node .github/scripts/update-app-version.cjs
-
-      - name: 🔧 Configure Global Gradle Settings
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret && github.event.inputs.platform == 'android' }}
+      - name: Build app
+        shell: bash
+        working-directory: app
+        env:
+          BUILD_PLATFORM: ${{ inputs.platform }}
+          BUILD_PROFILE: ${{ inputs.profile }}
+          EAS_LOCAL_BUILD_ARTIFACTS_DIR: ${{ runner.temp }}/eas-artifacts
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
         run: |
-          mkdir -p ~/.gradle
-          cat > ~/.gradle/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx14g -XX:MaxMetaspaceSize=2048m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
-          org.gradle.parallel=true
-          org.gradle.configureondemand=true
-          org.gradle.daemon=false
-          org.gradle.caching=true
-          EOF
-          echo "Global Gradle configuration created at ~/.gradle/gradle.properties"
-          cat ~/.gradle/gradle.properties
-
-      - name: ⚙ Build app
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        run: |
+          mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
           eas build --local \
             --non-interactive \
-            --platform=${{ github.event.inputs.platform }} \
-            --profile=${{ github.event.inputs.profile }}
+            --platform "$BUILD_PLATFORM" \
+            --profile "$BUILD_PROFILE"
 
-      - name: 👀 Find path
-        id: find_path
-        run: echo "artifact_path=$(echo $(find . -maxdepth 1 -type f -name 'build-*.*'))" >> "$GITHUB_OUTPUT"
+      - name: Locate build artifact
+        id: artifact
+        shell: bash
+        env:
+          ARTIFACT_DIR: ${{ runner.temp }}/eas-artifacts
+        run: |
+          artifact_count=0
+          artifact_path=""
 
-      - name: ♨️ Show path
-        run: echo ${{ steps.find_path.outputs.artifact_path }}
+          while IFS= read -r candidate; do
+            artifact_count=$((artifact_count + 1))
+            artifact_path="$candidate"
+          done < <(
+            find "$ARTIFACT_DIR" -type f \
+              \( -name '*.apk' -o -name '*.aab' -o -name '*.ipa' \) \
+              -print
+          )
 
-      - name: 📱 Upload binary
-        if: ${{ github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: actions/upload-artifact@v4
+          if [[ "$artifact_count" -ne 1 ]]; then
+            echo "Expected exactly one APK, AAB, or IPA in $ARTIFACT_DIR; found $artifact_count." >&2
+            find "$ARTIFACT_DIR" -type f -print >&2
+            exit 1
+          fi
+
+          echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
+          echo "Artifact: $artifact_path"
+
+      - name: Upload GitHub artifact
+        if: ${{ inputs.artifact == 'upload' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: app-${{ github.event.inputs.platform }}
-          path: ${{ steps.find_path.outputs.artifact_path }}
+          name: ${{ inputs.repo }}-${{ inputs.platform }}-${{ inputs.profile }}-${{ github.run_number }}
+          path: ${{ steps.artifact.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
 
-      - name: 🕖 Submit app
-        if: ${{ contains('submit',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
-        run: eas submit -p ${{ github.event.inputs.platform }} --path ${{ steps.find_path.outputs.artifact_path }}
+      - name: Submit app
+        if: ${{ inputs.artifact == 'submit' }}
+        shell: bash
+        working-directory: app
+        env:
+          BUILD_PLATFORM: ${{ inputs.platform }}
+          BUILD_ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
 
-      - name: 📱 Upload File
-        id: loadlyio
-        if: ${{ contains('loadlyio',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: hoangdaicntt/telegram-installonair-actions@main
+      - name: Upload to Loadly and notify Telegram
+        if: ${{ inputs.artifact == 'loadlyio' }}
+        uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
-          messageTitle: '${{ github.event.inputs.repo }}[${{ github.event.inputs.branch }}] ${{ github.event.inputs.platform }} ${{ github.event.inputs.profile }}'
+          messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
           installonairUserId: '74613'
           telegramUid: ${{ secrets.TELEGRAM_TO }}
           telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
-          filePath: ${{ steps.find_path.outputs.artifact_path }}
-          method: 'loadlyio-build'
+          filePath: ${{ steps.artifact.outputs.artifact_path }}
+          method: loadlyio-build
 
-      - name: 📱 Message Build
-        if: ${{ contains('submit',github.event.inputs.artifact) && github.event.inputs.key == steps.secret.outputs.secret }}
-        uses: hoangdaicntt/telegram-installonair-actions@main
+      - name: Notify Telegram after submission
+        if: ${{ inputs.artifact == 'submit' }}
+        uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
-          messageTitle: '${{ github.event.inputs.repo }}[${{ github.event.inputs.branch }}] ${{ github.event.inputs.platform }} ${{ github.event.inputs.profile }}'
+          messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
           installonairUserId: '74613'
           telegramUid: ${{ secrets.TELEGRAM_TO }}
           telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
-          filePath: ${{ steps.find_path.outputs.artifact_path }}
-          method: 'send-only'
+          filePath: ${{ steps.artifact.outputs.artifact_path }}
+          method: send-only
