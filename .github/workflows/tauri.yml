@@ -1,0 +1,423 @@
+name: Build Tauri
+run-name: ${{ inputs.os }} | ${{ inputs.target }} | ${{ inputs.mode }} | ${{ inputs.repo }} | ${{ inputs.branch }} | ${{ inputs.artifact }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        type: choice
+        description: Runner image and desktop platform to build
+        required: true
+        default: windows-latest
+        options:
+          - windows-latest
+          - macos-latest
+          - ubuntu-22.04
+      target:
+        type: string
+        description: Rust target triple, or native for the runner default
+        required: true
+        default: native
+      mode:
+        type: choice
+        description: Tauri build mode
+        required: true
+        default: release
+        options:
+          - release
+          - debug
+      bundles:
+        type: string
+        description: Bundle types separated by commas, or project to use tauri.conf
+        required: true
+        default: project
+      project_path:
+        type: string
+        description: Tauri project path relative to the source repository
+        required: true
+        default: .
+      linux_webkit:
+        type: choice
+        description: Linux WebKitGTK API; auto detects Tauri v1 or v2
+        required: true
+        default: auto
+        options:
+          - auto
+          - "4.0"
+          - "4.1"
+      repo:
+        type: string
+        description: App repository name
+        required: true
+      branch:
+        type: string
+        description: App branch, tag, or commit SHA
+        required: true
+        default: master
+      artifact:
+        type: choice
+        description: Post-build action
+        required: true
+        default: upload
+        options:
+          - none
+          - upload
+      key:
+        type: string
+        description: Shared build access key
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tauri-build-${{ inputs.repo }}-${{ inputs.branch }}-${{ inputs.os }}-${{ inputs.target }}-${{ inputs.mode }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 120
+    env:
+      CI: true
+      GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+    steps:
+      - name: Validate authorization and build inputs
+        shell: bash
+        env:
+          PROVIDED_KEY: ${{ inputs.key }}
+          EXPECTED_KEY: ${{ secrets.KEY }}
+          BUILD_OS: ${{ inputs.os }}
+          BUILD_TARGET: ${{ inputs.target }}
+          BUNDLE_TYPES: ${{ inputs.bundles }}
+          APP_REPO: ${{ inputs.repo }}
+          PROJECT_PATH: ${{ inputs.project_path }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$EXPECTED_KEY" ]]; then
+            echo "Repository secret KEY is not configured." >&2
+            exit 1
+          fi
+
+          if [[ "$PROVIDED_KEY" != "$EXPECTED_KEY" ]]; then
+            echo "Invalid build access key." >&2
+            exit 1
+          fi
+
+          if [[ ! "$APP_REPO" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Invalid repository name: $APP_REPO" >&2
+            exit 1
+          fi
+
+          if [[ "$PROJECT_PATH" == /* || "$PROJECT_PATH" =~ (^|/)\.\.(/|$) || ! "$PROJECT_PATH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "project_path must be a safe relative path." >&2
+            exit 1
+          fi
+
+          if [[ "$BUILD_TARGET" != "native" && ! "$BUILD_TARGET" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Invalid Rust target: $BUILD_TARGET" >&2
+            exit 1
+          fi
+
+          if [[ "$BUNDLE_TYPES" != "project" && ! "$BUNDLE_TYPES" =~ ^[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$ ]]; then
+            echo "bundles must be project or a comma-separated list of bundle types." >&2
+            exit 1
+          fi
+
+          case "$BUILD_TARGET" in
+            *-windows-*)
+              [[ "$BUILD_OS" == "windows-latest" ]] || { echo "Windows targets require windows-latest." >&2; exit 1; }
+              ;;
+            *-apple-darwin)
+              [[ "$BUILD_OS" == "macos-latest" ]] || { echo "Apple targets require macos-latest." >&2; exit 1; }
+              ;;
+            *-linux-*)
+              [[ "$BUILD_OS" == "ubuntu-22.04" ]] || { echo "Linux targets require ubuntu-22.04." >&2; exit 1; }
+              ;;
+          esac
+
+      - name: Checkout build tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: builder
+          persist-credentials: false
+
+      - name: Checkout app source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ secrets.USER }}/${{ inputs.repo }}
+          ref: ${{ inputs.branch }}
+          token: ${{ secrets.GH_TOKEN }}
+          path: app
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve project layout
+        id: project
+        shell: bash
+        env:
+          PROJECT_PATH_INPUT: ${{ inputs.project_path }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$PROJECT_PATH_INPUT" == "." ]]; then
+            project_dir="app"
+          else
+            project_dir="app/$PROJECT_PATH_INPUT"
+          fi
+
+          [[ -d "$project_dir" ]] || { echo "Project directory not found: $project_dir" >&2; exit 1; }
+          [[ -f "$project_dir/src-tauri/Cargo.toml" ]] || { echo "src-tauri/Cargo.toml was not found in $project_dir." >&2; exit 1; }
+
+          config_count=0
+          for config in tauri.conf.json tauri.conf.json5 Tauri.toml; do
+            [[ -f "$project_dir/src-tauri/$config" ]] && config_count=$((config_count + 1))
+          done
+          if [[ "$config_count" -eq 0 ]]; then
+            echo "No supported Tauri configuration was found in $project_dir/src-tauri." >&2
+            exit 1
+          fi
+
+          package_dir="$project_dir"
+          lockfile_count=0
+          package_manager=""
+
+          detect_lockfiles() {
+            local directory="$1"
+            lockfile_count=0
+            package_manager=""
+
+            if [[ -f "$directory/pnpm-lock.yaml" ]]; then
+              package_manager="pnpm"
+              lockfile_count=$((lockfile_count + 1))
+            fi
+            if [[ -f "$directory/yarn.lock" ]]; then
+              package_manager="yarn"
+              lockfile_count=$((lockfile_count + 1))
+            fi
+            if [[ -f "$directory/package-lock.json" ]]; then
+              package_manager="npm"
+              lockfile_count=$((lockfile_count + 1))
+            fi
+            if [[ -f "$directory/bun.lock" || -f "$directory/bun.lockb" ]]; then
+              package_manager="bun"
+              lockfile_count=$((lockfile_count + 1))
+            fi
+          }
+
+          detect_lockfiles "$package_dir"
+          if [[ "$lockfile_count" -eq 0 && "$project_dir" != "app" ]]; then
+            package_dir="app"
+            detect_lockfiles "$package_dir"
+          fi
+
+          if [[ "$lockfile_count" -gt 1 ]]; then
+            echo "Expected at most one supported lockfile in $package_dir; found $lockfile_count." >&2
+            exit 1
+          fi
+
+          if [[ "$lockfile_count" -eq 0 ]]; then
+            if [[ -f "$project_dir/package.json" || -f "app/package.json" ]]; then
+              echo "A JavaScript project requires one committed pnpm, Yarn, npm, or Bun lockfile." >&2
+              exit 1
+            fi
+            package_manager="cargo"
+            package_dir="$project_dir"
+          fi
+
+          echo "PROJECT_DIR=$project_dir" >> "$GITHUB_ENV"
+          echo "PACKAGE_DIR=$package_dir" >> "$GITHUB_ENV"
+          echo "PACKAGE_MANAGER=$package_manager" >> "$GITHUB_ENV"
+          echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+          echo "Package manager: $package_manager"
+          echo "Tauri project: $project_dir"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+
+      - name: Configure project package manager
+        if: env.PACKAGE_MANAGER != 'cargo' && env.PACKAGE_MANAGER != 'bun'
+        shell: bash
+        run: corepack enable
+
+      - name: Setup Bun
+        if: env.PACKAGE_MANAGER == 'bun'
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+
+      - name: Load generic build environment
+        shell: bash
+        env:
+          BUILD_ENV: ${{ secrets.TAURI_BUILD_ENV }}
+        run: |
+          set -euo pipefail
+
+          loaded=0
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            line="${line%$'\r'}"
+            [[ -z "$line" || "$line" == \#* ]] && continue
+
+            if [[ "$line" != *=* ]]; then
+              echo "Each TAURI_BUILD_ENV line must use NAME=value format." >&2
+              exit 1
+            fi
+
+            name="${line%%=*}"
+            if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+              echo "Invalid variable name in TAURI_BUILD_ENV: $name" >&2
+              exit 1
+            fi
+
+            case "$name" in
+              GITHUB_*|RUNNER_*|ACTIONS_*|NODE_OPTIONS)
+                echo "TAURI_BUILD_ENV cannot override protected variable: $name" >&2
+                exit 1
+                ;;
+            esac
+
+            echo "$line" >> "$GITHUB_ENV"
+            loaded=$((loaded + 1))
+          done <<< "$BUILD_ENV"
+
+          echo "Loaded $loaded project build environment variable(s)."
+
+      - name: Install frontend dependencies
+        if: env.PACKAGE_MANAGER != 'cargo'
+        shell: bash
+        working-directory: ${{ env.PACKAGE_DIR }}
+        run: |
+          set -euo pipefail
+
+          case "$PACKAGE_MANAGER" in
+            pnpm)
+              pnpm install --frozen-lockfile --prefer-offline
+              ;;
+            yarn)
+              yarn_major="$(yarn --version | cut -d. -f1)"
+              if [[ "$yarn_major" == "1" ]]; then
+                yarn install --frozen-lockfile --prefer-offline
+              else
+                yarn install --immutable
+              fi
+              ;;
+            npm)
+              npm ci --prefer-offline
+              ;;
+            bun)
+              bun install --frozen-lockfile
+              ;;
+          esac
+
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['verify:versions'] ? 0 : 1)"; then
+            case "$PACKAGE_MANAGER" in
+              pnpm) pnpm run verify:versions ;;
+              yarn) yarn run verify:versions ;;
+              npm) npm run verify:versions ;;
+              bun) bun run verify:versions ;;
+            esac
+          fi
+
+      - name: Install Linux system dependencies
+        if: inputs.os == 'ubuntu-22.04'
+        shell: bash
+        env:
+          WEBKIT_INPUT: ${{ inputs.linux_webkit }}
+        run: |
+          set -euo pipefail
+
+          webkit_version="$WEBKIT_INPUT"
+          if [[ "$webkit_version" == "auto" ]]; then
+            cargo_lock=""
+            for candidate in "$PROJECT_DIR/src-tauri/Cargo.lock" "app/Cargo.lock"; do
+              if [[ -f "$candidate" ]]; then
+                cargo_lock="$candidate"
+                break
+              fi
+            done
+
+            tauri_major=""
+            if [[ -n "$cargo_lock" ]]; then
+              tauri_major="$(awk '
+                $0 == "name = \"tauri\"" { found = 1; next }
+                found && /^version = / {
+                  gsub(/[^0-9.]/, "", $3)
+                  split($3, version, ".")
+                  print version[1]
+                  exit
+                }
+              ' "$cargo_lock")"
+            fi
+
+            if [[ "$tauri_major" == "1" ]]; then
+              webkit_version="4.0"
+            else
+              webkit_version="4.1"
+            fi
+          fi
+
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            "libwebkit2gtk-$webkit_version-dev" \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libxdo-dev \
+            wget
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+          targets: ${{ inputs.target != 'native' && inputs.target || '' }}
+
+      - name: Configure Tauri build arguments
+        id: build_args
+        shell: bash
+        env:
+          BUILD_TARGET: ${{ inputs.target }}
+          BUILD_MODE: ${{ inputs.mode }}
+          BUNDLE_TYPES: ${{ inputs.bundles }}
+        run: |
+          set -euo pipefail
+
+          args=""
+          if [[ "$BUILD_TARGET" != "native" ]]; then
+            args="$args --target $BUILD_TARGET"
+          fi
+          if [[ "$BUILD_MODE" == "debug" ]]; then
+            args="$args --debug"
+          fi
+          if [[ "$BUNDLE_TYPES" != "project" ]]; then
+            args="$args --bundles $BUNDLE_TYPES"
+          fi
+
+          echo "args=${args# }" >> "$GITHUB_OUTPUT"
+
+      - name: Build Tauri app
+        id: tauri
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: ${{ steps.project.outputs.project_dir }}
+          args: ${{ steps.build_args.outputs.args }}
+          retryAttempts: 1
+          uploadWorkflowArtifacts: ${{ inputs.artifact == 'upload' }}
+          workflowArtifactNamePattern: ${{ inputs.repo }}-${{ inputs.os }}-[arch]-[bundle]-${{ github.run_number }}
+
+      - name: Report build artifacts
+        shell: bash
+        env:
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: |
+          echo "Tauri build completed."
+          echo "Artifacts: $ARTIFACT_PATHS"

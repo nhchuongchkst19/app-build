@@ -1,7 +1,10 @@
 # App Build Workflow
 
-This repository hosts the manually dispatched EAS local-build workflow in
-`.github/workflows/build.yml`.
+This repository hosts manually dispatched builders for EAS apps and Tauri
+desktop apps:
+
+- `.github/workflows/build.yml`: Android and iOS EAS local builds.
+- `.github/workflows/tauri.yml`: Windows, macOS, and Linux Tauri builds.
 
 ## Build isolation
 
@@ -21,6 +24,28 @@ guard for existing build clients.
 - `upload`: upload a GitHub Actions artifact for seven days.
 - `loadlyio`: upload to Loadly and notify Telegram.
 - `submit`: submit with EAS and notify Telegram after success.
+
+The Tauri workflow supports `none` and `upload`. Upload mode publishes every
+bundle produced by Tauri as a GitHub Actions artifact, including NSIS, MSI,
+DMG, AppImage, DEB, and RPM bundles when enabled by the selected project.
+
+## Tauri builds
+
+The Tauri workflow is project-independent. Select the runner OS, optionally
+provide a Rust target triple, and use `bundles: project` to honor the target
+repository's `tauri.conf` bundle settings. `project_path` supports Tauri apps
+at the repository root and inside monorepos.
+
+It detects pnpm, Yarn, npm, Bun, and Cargo-only projects from committed
+lockfiles. Linux builds support Tauri v1 (WebKitGTK 4.0) and Tauri v2
+(WebKitGTK 4.1); automatic detection uses `Cargo.lock`, and the dispatch input
+can override it when a lockfile is unavailable.
+
+Project-specific build variables can be stored in the optional
+`TAURI_BUILD_ENV` secret, with one `NAME=value` entry per line. Updater signing
+uses the standard `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets. Code-signing configuration for
+Windows or macOS remains owned by each target project.
 
 ## Cache security
 
