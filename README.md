@@ -1,10 +1,12 @@
 # App Build Workflow
 
-This repository hosts manually dispatched builders for EAS apps and Tauri
-desktop apps:
+This repository hosts manually dispatched builders for EAS apps, Tauri apps,
+and Electron desktop apps:
 
 - `.github/workflows/build.yml`: Android and iOS EAS local builds.
 - `.github/workflows/tauri.yml`: Windows, macOS, and Linux Tauri builds.
+- `.github/workflows/electron.yml`: Windows, macOS, and Linux Electron builds,
+  including MSIX packages on Windows.
 
 ## Build isolation
 
@@ -28,6 +30,27 @@ guard for existing build clients.
 The Tauri workflow supports `none` and `upload`. Upload mode publishes every
 bundle produced by Tauri as a GitHub Actions artifact, including NSIS, MSI,
 DMG, AppImage, DEB, and RPM bundles when enabled by the selected project.
+The Electron workflow also supports `none` and `upload`; it uploads the
+project's Electron Forge `out/make` output, or the unpacked `out` directory for
+the `package` task.
+
+## Electron builds
+
+The Electron workflow supports `make`, `package`, and `msix` tasks. Target
+projects must declare Electron, commit exactly one supported JavaScript
+lockfile, and provide the corresponding `make`, `package`, or `make:msix`
+package script. MSIX builds are restricted to `windows-latest`.
+
+Use `project_path` for Electron applications inside monorepos. The workflow
+supports pnpm, Yarn, npm, and Bun, Node.js 22 or 24, and native, x64, ARM64, or
+IA32 packaging. If the project has a `validate` script, it runs before the
+package build.
+
+Project-specific variables can be stored in the optional
+`ELECTRON_BUILD_ENV` secret with one `NAME=value` entry per line. Optional
+Windows signing uses `WINDOWS_CERTIFICATE_BASE64` and
+`WINDOWS_CERTIFICATE_PASSWORD`; the decoded certificate path is exposed to the
+project as `WINDOWS_CERTIFICATE_FILE`.
 
 ## Tauri builds
 

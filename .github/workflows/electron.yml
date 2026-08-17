@@ -1,0 +1,355 @@
+name: Build Electron
+run-name: ${{ inputs.os }} | ${{ inputs.task }} | ${{ inputs.arch }} | ${{ inputs.repo }} | ${{ inputs.branch }} | ${{ inputs.artifact }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        type: choice
+        description: Runner image and desktop platform
+        required: true
+        default: windows-latest
+        options:
+          - windows-latest
+          - macos-latest
+          - ubuntu-22.04
+      task:
+        type: choice
+        description: Electron package task
+        required: true
+        default: msix
+        options:
+          - msix
+          - make
+          - package
+      arch:
+        type: choice
+        description: Target architecture
+        required: true
+        default: x64
+        options:
+          - x64
+          - arm64
+          - ia32
+          - native
+      node_version:
+        type: choice
+        description: Node.js version used by the project
+        required: true
+        default: 22.x
+        options:
+          - 22.x
+          - 24.x
+      project_path:
+        type: string
+        description: Electron project path relative to the source repository
+        required: true
+        default: .
+      repo:
+        type: string
+        description: App repository name
+        required: true
+      branch:
+        type: string
+        description: App branch, tag, or commit SHA
+        required: true
+        default: master
+      artifact:
+        type: choice
+        description: Post-build action
+        required: true
+        default: upload
+        options:
+          - none
+          - upload
+      key:
+        type: string
+        description: Shared build access key
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: electron-build-${{ inputs.repo }}-${{ inputs.branch }}-${{ inputs.os }}-${{ inputs.task }}-${{ inputs.arch }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 120
+    env:
+      CI: true
+      GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
+
+    steps:
+      - name: Validate authorization and build inputs
+        shell: bash
+        env:
+          PROVIDED_KEY: ${{ inputs.key }}
+          EXPECTED_KEY: ${{ secrets.KEY }}
+          BUILD_OS: ${{ inputs.os }}
+          BUILD_TASK: ${{ inputs.task }}
+          APP_REPO: ${{ inputs.repo }}
+          PROJECT_PATH: ${{ inputs.project_path }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$EXPECTED_KEY" ]]; then
+            echo "Repository secret KEY is not configured." >&2
+            exit 1
+          fi
+
+          if [[ "$PROVIDED_KEY" != "$EXPECTED_KEY" ]]; then
+            echo "Invalid build access key." >&2
+            exit 1
+          fi
+
+          if [[ ! "$APP_REPO" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Invalid repository name: $APP_REPO" >&2
+            exit 1
+          fi
+
+          if [[ "$PROJECT_PATH" == /* || "$PROJECT_PATH" =~ (^|/)\.\.(/|$) || ! "$PROJECT_PATH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "project_path must be a safe relative path." >&2
+            exit 1
+          fi
+
+          if [[ "$BUILD_TASK" == "msix" && "$BUILD_OS" != "windows-latest" ]]; then
+            echo "MSIX builds require windows-latest." >&2
+            exit 1
+          fi
+
+      - name: Checkout build tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: builder
+          persist-credentials: false
+
+      - name: Checkout app source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ secrets.USER }}/${{ inputs.repo }}
+          ref: ${{ inputs.branch }}
+          token: ${{ secrets.GH_TOKEN }}
+          path: app
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve Electron project
+        id: project
+        shell: bash
+        env:
+          PROJECT_PATH_INPUT: ${{ inputs.project_path }}
+          BUILD_TASK: ${{ inputs.task }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$PROJECT_PATH_INPUT" == "." ]]; then
+            project_dir="app"
+          else
+            project_dir="app/$PROJECT_PATH_INPUT"
+          fi
+
+          [[ -d "$project_dir" ]] || { echo "Project directory not found: $project_dir" >&2; exit 1; }
+          [[ -f "$project_dir/package.json" ]] || { echo "package.json was not found in $project_dir." >&2; exit 1; }
+
+          lockfile_count=0
+          package_manager=""
+          if [[ -f "$project_dir/pnpm-lock.yaml" ]]; then package_manager="pnpm"; lockfile_count=$((lockfile_count + 1)); fi
+          if [[ -f "$project_dir/yarn.lock" ]]; then package_manager="yarn"; lockfile_count=$((lockfile_count + 1)); fi
+          if [[ -f "$project_dir/package-lock.json" ]]; then package_manager="npm"; lockfile_count=$((lockfile_count + 1)); fi
+          if [[ -f "$project_dir/bun.lock" || -f "$project_dir/bun.lockb" ]]; then package_manager="bun"; lockfile_count=$((lockfile_count + 1)); fi
+
+          if [[ "$lockfile_count" -ne 1 ]]; then
+            echo "Expected exactly one committed pnpm, Yarn, npm, or Bun lockfile in $project_dir; found $lockfile_count." >&2
+            exit 1
+          fi
+
+          PROJECT_DIR="$project_dir" BUILD_TASK="$BUILD_TASK" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const project = process.env.PROJECT_DIR;
+          const task = process.env.BUILD_TASK;
+          const pkg = JSON.parse(fs.readFileSync(path.join(project, 'package.json'), 'utf8'));
+          const dependencies = { ...pkg.dependencies, ...pkg.devDependencies };
+          if (!dependencies.electron) {
+            console.error('The project does not declare an Electron dependency.');
+            process.exit(1);
+          }
+          const requiredScript = task === 'msix' ? 'make:msix' : task;
+          if (!pkg.scripts?.[requiredScript]) {
+            console.error(`Required package script not found: ${requiredScript}`);
+            process.exit(1);
+          }
+          NODE
+
+          echo "PROJECT_DIR=$project_dir" >> "$GITHUB_ENV"
+          echo "PACKAGE_MANAGER=$package_manager" >> "$GITHUB_ENV"
+          echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+          echo "Electron project: $project_dir"
+          echo "Package manager: $package_manager"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Configure project package manager
+        if: env.PACKAGE_MANAGER != 'bun'
+        shell: bash
+        run: corepack enable
+
+      - name: Setup Bun
+        if: env.PACKAGE_MANAGER == 'bun'
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+
+      - name: Load generic build environment
+        shell: bash
+        env:
+          BUILD_ENV: ${{ secrets.ELECTRON_BUILD_ENV }}
+        run: |
+          set -euo pipefail
+
+          loaded=0
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            line="${line%$'\r'}"
+            [[ -z "$line" || "$line" == \#* ]] && continue
+
+            if [[ "$line" != *=* ]]; then
+              echo "Each ELECTRON_BUILD_ENV line must use NAME=value format." >&2
+              exit 1
+            fi
+
+            name="${line%%=*}"
+            if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+              echo "Invalid variable name in ELECTRON_BUILD_ENV: $name" >&2
+              exit 1
+            fi
+
+            case "$name" in
+              GITHUB_*|RUNNER_*|ACTIONS_*|NODE_OPTIONS)
+                echo "ELECTRON_BUILD_ENV cannot override protected variable: $name" >&2
+                exit 1
+                ;;
+            esac
+
+            echo "$line" >> "$GITHUB_ENV"
+            loaded=$((loaded + 1))
+          done <<< "$BUILD_ENV"
+
+          echo "Loaded $loaded project build environment variable(s)."
+
+      - name: Provision Windows signing certificate
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$WINDOWS_CERTIFICATE_BASE64" ]]; then
+            echo "No Windows signing certificate configured; the project packager will use its default signing behavior."
+            exit 0
+          fi
+          certificate_path="$RUNNER_TEMP/electron-signing.pfx"
+          printf '%s' "$WINDOWS_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+          echo "WINDOWS_CERTIFICATE_FILE=$certificate_path" >> "$GITHUB_ENV"
+          echo "WINDOWS_CERTIFICATE_PASSWORD=$WINDOWS_CERTIFICATE_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Install project dependencies
+        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -euo pipefail
+          case "$PACKAGE_MANAGER" in
+            pnpm) pnpm install --frozen-lockfile --prefer-offline ;;
+            yarn)
+              yarn_major="$(yarn --version | cut -d. -f1)"
+              if [[ "$yarn_major" == "1" ]]; then yarn install --frozen-lockfile --prefer-offline; else yarn install --immutable; fi
+              ;;
+            npm) npm ci --prefer-offline ;;
+            bun) bun install --frozen-lockfile ;;
+          esac
+
+      - name: Validate project
+        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -euo pipefail
+          if node -e "const p=require('./package.json'); process.exit(p.scripts?.validate ? 0 : 1)"; then
+            case "$PACKAGE_MANAGER" in
+              pnpm) pnpm run validate ;;
+              yarn) yarn run validate ;;
+              npm) npm run validate ;;
+              bun) bun run validate ;;
+            esac
+          else
+            echo "No validate script; continuing with the package build."
+          fi
+
+      - name: Build Electron package
+        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          BUILD_TASK: ${{ inputs.task }}
+          BUILD_ARCH: ${{ inputs.arch }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$BUILD_TASK" == "msix" ]]; then script="make:msix"; else script="$BUILD_TASK"; fi
+          args=()
+          if [[ "$BUILD_ARCH" != "native" ]]; then args+=(--arch "$BUILD_ARCH"); fi
+
+          case "$PACKAGE_MANAGER" in
+            pnpm) pnpm run "$script" -- "${args[@]}" ;;
+            yarn) yarn run "$script" "${args[@]}" ;;
+            npm) npm run "$script" -- "${args[@]}" ;;
+            bun) bun run "$script" -- "${args[@]}" ;;
+          esac
+
+      - name: Locate build output
+        id: artifact
+        shell: bash
+        env:
+          BUILD_TASK: ${{ inputs.task }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$BUILD_TASK" == "package" ]]; then
+            artifact_path="$PROJECT_DIR/out"
+          elif [[ -d "$PROJECT_DIR/out/make" ]]; then
+            artifact_path="$PROJECT_DIR/out/make"
+          else
+            artifact_path="$PROJECT_DIR/out"
+          fi
+
+          [[ -d "$artifact_path" ]] || { echo "Electron output directory not found: $artifact_path" >&2; exit 1; }
+          artifact_count="$(find "$artifact_path" -type f | wc -l | tr -d ' ')"
+          [[ "$artifact_count" -gt 0 ]] || { echo "No Electron artifacts found in $artifact_path" >&2; exit 1; }
+
+          if [[ "$BUILD_TASK" == "msix" ]]; then
+            msix_count="$(find "$artifact_path" -type f \( -name '*.msix' -o -name '*.appx' \) | wc -l | tr -d ' ')"
+            [[ "$msix_count" -gt 0 ]] || { echo "No MSIX/AppX package found in $artifact_path" >&2; exit 1; }
+          fi
+
+          echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
+          echo "Artifact directory: $artifact_path ($artifact_count files)"
+
+      - name: Upload GitHub artifact
+        if: inputs.artifact == 'upload'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.repo }}-${{ inputs.os }}-${{ inputs.task }}-${{ inputs.arch }}-${{ github.run_number }}
+          path: ${{ steps.artifact.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Report build artifacts
+        shell: bash
+        env:
+          ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
+        run: |
+          echo "Electron build completed."
+          find "$ARTIFACT_PATH" -type f -print
