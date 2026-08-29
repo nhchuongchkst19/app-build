@@ -89,3 +89,15 @@ monotonically increasing value from `GITHUB_RUN_NUMBER` and
 `GITHUB_RUN_ATTEMPT`, while ensuring it never lowers an existing numeric build
 version. It skips projects that use `cli.appVersionSource: "remote"`, which is
 the recommended configuration for production auto-incrementing in EAS.
+
+## iOS development HTTP requests
+
+For iOS builds using the exact `development` profile, the workflow temporarily
+sets `expo.ios.infoPlist.NSAppTransportSecurity.NSAllowsArbitraryLoads` to
+`true` in the target application's `app.json`. Existing configuration is
+preserved, and an app that is already configured is left unchanged.
+
+If the target application does not contain `app.json`, the workflow logs that
+the configuration was skipped and continues. Dynamic app config files and
+native `Info.plist` files are not modified. Other iOS profiles and all Android
+builds are unaffected.

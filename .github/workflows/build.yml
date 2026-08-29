@@ -172,6 +172,10 @@ jobs:
             fi
           fi
 
+      - name: Allow HTTP for iOS development builds
+        if: ${{ inputs.platform == 'ios' && inputs.profile == 'development' }}
+        run: node builder/.github/scripts/configure-ios-development-http.cjs app
+
       - name: Setup Gradle
         if: ${{ inputs.platform == 'android' }}
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.1.0
