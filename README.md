@@ -3,7 +3,7 @@
 This repository hosts manually dispatched builders for EAS apps, Tauri apps,
 and Electron desktop apps:
 
-- `.github/workflows/build.yml`: Android and iOS EAS local builds.
+- `.github/workflows/build.yml`: Android/iOS EAS local builds and Electron Windows builds.
 - `.github/workflows/tauri.yml`: Windows, macOS, and Linux Tauri builds.
 - `.github/workflows/electron.yml`: Windows, macOS, and Linux Electron builds,
   including MSIX packages on Windows.
@@ -35,6 +35,14 @@ project's Electron Forge `out/make` output, or the unpacked `out` directory for
 the `package` task.
 
 ## Electron builds
+
+The centralized `build.yml` accepts `platform=windows` with `os=windows-latest`.
+It requires a root Electron project with a committed pnpm lockfile and a
+`build:win` script, then uploads `.exe`, `.msi`, `.zip`, and release metadata
+from `release/`. Windows supports only the `none` and `upload` artifact modes;
+all existing Android/iOS steps remain conditional and unchanged.
+
+The dedicated workflow below remains available for Electron Forge projects.
 
 The Electron workflow supports `make`, `package`, and `msix` tasks. Target
 projects must declare Electron, commit exactly one supported JavaScript

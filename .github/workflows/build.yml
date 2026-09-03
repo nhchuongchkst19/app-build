@@ -6,12 +6,13 @@ on:
     inputs:
       os:
         type: choice
-        description: Runner image (iOS requires macos-26)
+        description: Runner image (iOS requires macos-26; Windows requires windows-latest)
         required: true
         default: ubuntu-latest
         options:
           - ubuntu-latest
           - macos-26
+          - windows-latest
       platform:
         type: choice
         description: Platform to build
@@ -20,6 +21,7 @@ on:
         options:
           - android
           - ios
+          - windows
       profile:
         type: choice
         description: EAS build profile
@@ -66,6 +68,8 @@ jobs:
   build:
     runs-on: ${{ inputs.os }}
     timeout-minutes: 120
+    env:
+      CI: true
 
     steps:
       - name: Validate authorization and build inputs
@@ -76,6 +80,7 @@ jobs:
           BUILD_OS: ${{ inputs.os }}
           BUILD_PLATFORM: ${{ inputs.platform }}
           APP_REPO: ${{ inputs.repo }}
+          ARTIFACT_MODE: ${{ inputs.artifact }}
         run: |
           if [[ -z "$EXPECTED_KEY" ]]; then
             echo "Repository secret KEY is not configured." >&2
@@ -94,6 +99,16 @@ jobs:
 
           if [[ "$BUILD_PLATFORM" == "ios" && "$BUILD_OS" != "macos-26" ]]; then
             echo "iOS builds require the macos-26 runner." >&2
+            exit 1
+          fi
+
+          if [[ "$BUILD_PLATFORM" == "windows" && "$BUILD_OS" != "windows-latest" ]]; then
+            echo "Electron Windows builds require the windows-latest runner." >&2
+            exit 1
+          fi
+
+          if [[ "$BUILD_PLATFORM" == "windows" && "$ARTIFACT_MODE" != "upload" && "$ARTIFACT_MODE" != "none" ]]; then
+            echo "Electron Windows builds support only upload or none artifact modes." >&2
             exit 1
           fi
 
@@ -148,6 +163,7 @@ jobs:
           echo "Using $package_manager from the committed lockfile."
 
       - name: Setup EAS CLI
+        if: ${{ inputs.platform != 'windows' }}
         run: npm install --global eas-cli@21.0.0
 
       - name: Install project dependencies
@@ -196,6 +212,7 @@ jobs:
             ${{ runner.os }}-ios-pods-${{ inputs.repo }}-
 
       - name: Update native build version
+        if: ${{ inputs.platform != 'windows' }}
         env:
           BUILD_PLATFORM: ${{ inputs.platform }}
         run: node builder/.github/scripts/update-app-version.cjs app
@@ -213,6 +230,7 @@ jobs:
           } > "$HOME/.gradle/gradle.properties"
 
       - name: Build app
+        if: ${{ inputs.platform != 'windows' }}
         shell: bash
         working-directory: app
         env:
@@ -228,12 +246,69 @@ jobs:
             --platform "$BUILD_PLATFORM" \
             --profile "$BUILD_PROFILE"
 
+      - name: Validate Electron Windows project
+        if: ${{ inputs.platform == 'windows' }}
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          [[ -f pnpm-lock.yaml ]] || { echo "Electron Windows builds require a committed pnpm-lock.yaml." >&2; exit 1; }
+          node <<'NODE'
+          const pkg = require('./package.json');
+          const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+          if (!deps.electron) throw new Error('The Windows project must declare Electron.');
+          if (!pkg.scripts?.['build:win']) throw new Error('Required package script not found: build:win');
+          NODE
+
+      - name: Provision optional Windows signing certificate
+        if: ${{ inputs.platform == 'windows' }}
+        shell: bash
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$WINDOWS_CERTIFICATE_BASE64" ]]; then
+            echo "No Windows signing certificate configured; producing an unsigned review artifact."
+            exit 0
+          fi
+          certificate_path="$RUNNER_TEMP/windows-signing.pfx"
+          printf '%s' "$WINDOWS_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+          echo "CSC_LINK=$certificate_path" >> "$GITHUB_ENV"
+          echo "CSC_KEY_PASSWORD=$WINDOWS_CERTIFICATE_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build Electron Windows app
+        if: ${{ inputs.platform == 'windows' }}
+        shell: bash
+        working-directory: app
+        run: pnpm build:win
+
       - name: Locate build artifact
         id: artifact
         shell: bash
         env:
           ARTIFACT_DIR: ${{ runner.temp }}/eas-artifacts
+          BUILD_PLATFORM: ${{ inputs.platform }}
         run: |
+          set -euo pipefail
+          if [[ "$BUILD_PLATFORM" == "windows" ]]; then
+            artifact_dir="$GITHUB_WORKSPACE/app/release"
+            mapfile -t artifacts < <(find "$artifact_dir" -maxdepth 1 -type f \
+              \( -name '*.exe' -o -name '*.msi' -o -name '*.zip' -o -name 'release-metadata.json' \) -print | sort)
+            if [[ "${#artifacts[@]}" -lt 1 ]]; then
+              echo "No Windows EXE, MSI, ZIP, or release metadata found in $artifact_dir." >&2
+              find "$artifact_dir" -maxdepth 2 -type f -print >&2 || true
+              exit 1
+            fi
+            {
+              echo 'artifact_path<<EOF'
+              printf '%s\n' "${artifacts[@]}"
+              echo 'EOF'
+            } >> "$GITHUB_OUTPUT"
+            printf 'Windows artifact: %s\n' "${artifacts[@]}"
+            exit 0
+          fi
+
           artifact_count=0
           artifact_path=""
 
@@ -266,7 +341,7 @@ jobs:
           compression-level: 0
 
       - name: Submit app
-        if: ${{ inputs.artifact == 'submit' }}
+        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' }}
         shell: bash
         working-directory: app
         env:
@@ -276,7 +351,7 @@ jobs:
         run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
 
       - name: Upload to Loadly and notify Telegram
-        if: ${{ inputs.artifact == 'loadlyio' }}
+        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
         uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
@@ -288,7 +363,7 @@ jobs:
           method: loadlyio-build
 
       - name: Notify Telegram after submission
-        if: ${{ inputs.artifact == 'submit' }}
+        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' }}
         uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
