@@ -235,7 +235,7 @@ jobs:
         run: |
           node <<'NODE'
           const fs = require('node:fs'); const app = JSON.parse(fs.readFileSync('app.json', 'utf8'));
-          const number = process.env.BUILD_PROFILE === 'qa' ? 3301 : 3302;
+          const number = process.env.BUILD_PROFILE === 'qa' ? 3401 : 3402;
           app.expo.ios.buildNumber = String(number);
           app.expo.android.versionCode = 1100000000 + number;
           fs.writeFileSync('app.json', JSON.stringify(app, null, 2) + '\n');
