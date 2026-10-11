@@ -33,6 +33,7 @@ on:
           - preview
           - testflight
           - production
+          - qa
       repo:
         type: string
         description: App repository name
@@ -81,7 +82,13 @@ jobs:
           BUILD_PLATFORM: ${{ inputs.platform }}
           APP_REPO: ${{ inputs.repo }}
           ARTIFACT_MODE: ${{ inputs.artifact }}
+          APP_REF: ${{ inputs.branch }}
+          BUILD_PROFILE: ${{ inputs.profile }}
         run: |
+          if [[ "$APP_REPO" != "session-box-app" || "$ARTIFACT_MODE" != "upload" || ! "$APP_REF" =~ ^[0-9a-f]{40}$ || ! "$BUILD_PROFILE" =~ ^(qa|production)$ || ! "$BUILD_PLATFORM" =~ ^(ios|android)$ ]]; then
+            echo 'This isolated workflow supports only Session Box source-SHA QA/production artifact uploads.' >&2
+            exit 1
+          fi
           if [[ -z "$EXPECTED_KEY" ]]; then
             echo "Repository secret KEY is not configured." >&2
             exit 1
@@ -164,7 +171,7 @@ jobs:
 
       - name: Setup EAS CLI
         if: ${{ inputs.platform != 'windows' }}
-        run: npm install --global eas-cli@21.0.0
+        run: npx --yes eas-cli@21.0.0 --version
 
       - name: Install project dependencies
         shell: bash
@@ -211,11 +218,28 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ios-pods-${{ inputs.repo }}-
 
+      - name: Check Session Box source
+        working-directory: app
+        run: |
+          pnpm typecheck
+          pnpm test
+          pnpm test:repository
+
       - name: Update native build version
         if: ${{ inputs.platform != 'windows' }}
         env:
           BUILD_PLATFORM: ${{ inputs.platform }}
-        run: node builder/.github/scripts/update-app-version.cjs app
+          BUILD_PROFILE: ${{ inputs.profile }}
+        shell: bash
+        working-directory: app
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs'); const app = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+          const number = process.env.BUILD_PROFILE === 'qa' ? 3301 : 3302;
+          app.expo.ios.buildNumber = String(number);
+          app.expo.android.versionCode = 1100000000 + number;
+          fs.writeFileSync('app.json', JSON.stringify(app, null, 2) + '\n');
+          NODE
 
       - name: Configure Gradle memory
         if: ${{ inputs.platform == 'android' }}
@@ -241,10 +265,11 @@ jobs:
           GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
         run: |
           mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
-          eas build --local \
+          set -o pipefail
+          npx --yes eas-cli@21.0.0 build --local \
             --non-interactive \
             --platform "$BUILD_PLATFORM" \
-            --profile "$BUILD_PROFILE"
+            --profile "$BUILD_PROFILE" 2>&1 | node .github/scripts/redact-build-output.cjs
 
       - name: Validate Electron Windows project
         if: ${{ inputs.platform == 'windows' }}
