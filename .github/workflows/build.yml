@@ -67,6 +67,7 @@ concurrency:
 
 jobs:
   build:
+    if: ${{ inputs.artifact != 'loadlyio' }}
     runs-on: ${{ inputs.os }}
     timeout-minutes: 120
     env:
@@ -398,3 +399,38 @@ jobs:
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
           filePath: ${{ steps.artifact.outputs.artifact_path }}
           method: send-only
+
+  publish-development:
+    if: ${{ inputs.artifact == 'loadlyio' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Validate Session Box development publish
+        env:
+          PROVIDED_KEY: ${{ inputs.key }}
+          EXPECTED_KEY: ${{ secrets.KEY }}
+          APP_REPO: ${{ inputs.repo }}
+          APP_REF: ${{ inputs.branch }}
+          PROFILE: ${{ inputs.profile }}
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+          [[ -n "$EXPECTED_KEY" && "$PROVIDED_KEY" == "$EXPECTED_KEY" ]]
+          [[ "$APP_REPO" == "session-box-app" && "$APP_REF" == "0123d3214d25ff11893f61d73642bde248620032" && "$PROFILE" == "development" ]]
+          [[ "$PLATFORM" =~ ^(android|ios)$ ]]
+      - name: Checkout isolated publish tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Upload exact existing development binary to Loadly
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LOADLY_IO_TOKEN: ${{ secrets.LOADLYIO_TOKEN }}
+          BUILD_PLATFORM: ${{ inputs.platform }}
+        run: python3 .github/scripts/publish-session-box-development.py
+      - name: Remove runner copies
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/session-box-loadly"
