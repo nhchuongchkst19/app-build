@@ -90,7 +90,7 @@ jobs:
             exit 1
           fi
           if [[ "$ARTIFACT_MODE" == "loadlyio" ]]; then
-            [[ "$BUILD_PLATFORM" == "ios" && "$BUILD_PROFILE" == "development" ]] || exit 1
+            [[ "$BUILD_PROFILE" == "development" ]] || exit 1
           else
             [[ "$ARTIFACT_MODE" == "upload" && "$BUILD_PROFILE" =~ ^(qa|production)$ ]] || exit 1
           fi
@@ -380,13 +380,15 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
 
-      - name: Verify iOS signing identity and upload to Loadly
+      - name: Verify binary identity and upload to Loadly
         if: ${{ inputs.artifact == 'loadlyio' }}
         working-directory: app
         env:
           BUILD_ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
           LOADLY_IO_TOKEN: ${{ secrets.LOADLYIO_TOKEN }}
-        run: python3 ../builder/.github/scripts/publish-session-box-ios-development.py
+          BUILD_PLATFORM: ${{ inputs.platform }}
+          APP_SOURCE_SHA: ${{ inputs.branch }}
+        run: python3 ../builder/.github/scripts/publish-session-spaces-development.py
 
       - name: Notify Telegram after submission
         if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' }}
