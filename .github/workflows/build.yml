@@ -33,6 +33,7 @@ on:
           - preview
           - testflight
           - production
+          - qa
       repo:
         type: string
         description: App repository name
@@ -84,8 +85,14 @@ jobs:
           APP_REF: ${{ inputs.branch }}
           BUILD_PROFILE: ${{ inputs.profile }}
         run: |
-          if [[ "$APP_REPO" != "session-box-app" || ! "$APP_REF" =~ ^[0-9a-f]{40}$ || "$BUILD_PLATFORM" != "ios" || "$BUILD_PROFILE" != "production" || "$ARTIFACT_MODE" != "submit" ]]; then
-            echo 'Only immutable Session Spaces iOS production submit is allowed.' >&2
+          if [[ "$APP_REPO" != "session-box-app" || ! "$APP_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'Only pinned Session Spaces source is allowed.' >&2; exit 1
+          fi
+          if [[ "$BUILD_PLATFORM" == "ios" ]]; then
+            [[ "$BUILD_PROFILE" == "production" && "$ARTIFACT_MODE" == "submit" ]] || exit 1
+          elif [[ "$BUILD_PLATFORM" == "android" ]]; then
+            [[ "$BUILD_PROFILE" == "qa" && "$ARTIFACT_MODE" == "upload" ]] || exit 1
+          else
             exit 1
           fi
           if [[ -z "$EXPECTED_KEY" ]]; then
@@ -226,7 +233,7 @@ jobs:
           node <<'NODE'
           const a = require('./app.json').expo; const e = require('./eas.json');
           if (a.owner !== 'hoangdaicntt' || a.slug !== 'session-box' || a.extra.eas.projectId !== 'a90277f1-be2b-4109-91b3-5469f32fd378' || a.ios.bundleIdentifier !== 'com.sessionbox') throw Error('Wrong app identity');
-          if (e.build.production.env.SESSION_BOX_BUILD_NUMBER !== '3905' || e.submit.production.ios.ascAppId !== '1605559133') throw Error('Wrong TestFlight target');
+          if (e.build.production.env.SESSION_BOX_BUILD_NUMBER !== '3906' || e.build.qa.env.SESSION_BOX_BUILD_NUMBER !== '3906' || e.submit.production.ios.ascAppId !== '1605559133') throw Error('Wrong TestFlight target');
           NODE
 
       - name: Configure Gradle memory
