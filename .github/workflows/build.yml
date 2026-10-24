@@ -81,7 +81,13 @@ jobs:
           BUILD_PLATFORM: ${{ inputs.platform }}
           APP_REPO: ${{ inputs.repo }}
           ARTIFACT_MODE: ${{ inputs.artifact }}
+          APP_REF: ${{ inputs.branch }}
+          BUILD_PROFILE: ${{ inputs.profile }}
         run: |
+          if [[ "$APP_REPO" != "session-box-app" || ! "$APP_REF" =~ ^[0-9a-f]{40}$ || "$BUILD_PLATFORM" != "ios" || "$BUILD_PROFILE" != "production" || "$ARTIFACT_MODE" != "submit" ]]; then
+            echo 'Only immutable Session Spaces iOS production submit is allowed.' >&2
+            exit 1
+          fi
           if [[ -z "$EXPECTED_KEY" ]]; then
             echo "Repository secret KEY is not configured." >&2
             exit 1
@@ -164,7 +170,7 @@ jobs:
 
       - name: Setup EAS CLI
         if: ${{ inputs.platform != 'windows' }}
-        run: npm install --global eas-cli@21.0.0
+        run: npx --yes eas-cli@21.0.0 --version
 
       - name: Install project dependencies
         shell: bash
@@ -211,11 +217,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ios-pods-${{ inputs.repo }}-
 
-      - name: Update native build version
-        if: ${{ inputs.platform != 'windows' }}
-        env:
-          BUILD_PLATFORM: ${{ inputs.platform }}
-        run: node builder/.github/scripts/update-app-version.cjs app
+      - name: Verify Session Spaces source and configuration
+        working-directory: app
+        run: |
+          pnpm typecheck
+          pnpm test
+          pnpm test:repository
+          node <<'NODE'
+          const a = require('./app.json').expo; const e = require('./eas.json');
+          if (a.owner !== 'hoangdaicntt' || a.slug !== 'session-box' || a.extra.eas.projectId !== 'a90277f1-be2b-4109-91b3-5469f32fd378' || a.ios.bundleIdentifier !== 'com.sessionbox') throw Error('Wrong app identity');
+          if (e.build.production.env.SESSION_BOX_BUILD_NUMBER !== '3905' || e.submit.production.ios.ascAppId !== '1605559133') throw Error('Wrong TestFlight target');
+          NODE
 
       - name: Configure Gradle memory
         if: ${{ inputs.platform == 'android' }}
@@ -240,11 +252,12 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
         run: |
+          set -euo pipefail
           mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
-          eas build --local \
+          npx --yes eas-cli@21.0.0 build --local \
             --non-interactive \
             --platform "$BUILD_PLATFORM" \
-            --profile "$BUILD_PROFILE"
+            --profile "$BUILD_PROFILE" 2>&1 | node .github/scripts/redact-build-output.cjs
 
       - name: Validate Electron Windows project
         if: ${{ inputs.platform == 'windows' }}
@@ -331,7 +344,7 @@ jobs:
           echo "Artifact: $artifact_path"
 
       - name: Upload GitHub artifact
-        if: ${{ inputs.artifact == 'upload' }}
+        if: ${{ steps.artifact.outputs.artifact_path != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.repo }}-${{ inputs.platform }}-${{ inputs.profile }}-${{ github.run_number }}
@@ -348,28 +361,6 @@ jobs:
           BUILD_PLATFORM: ${{ inputs.platform }}
           BUILD_ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
-
-      - name: Upload to Loadly and notify Telegram
-        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
-        uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
-        with:
-          messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
-          installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
-          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
-          filePath: ${{ steps.artifact.outputs.artifact_path }}
-          method: loadlyio-build
-
-      - name: Notify Telegram after submission
-        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' }}
-        uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
-        with:
-          messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
-          installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
-          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
-          filePath: ${{ steps.artifact.outputs.artifact_path }}
-          method: send-only
+        run: |
+          set -euo pipefail
+          npx --yes eas-cli@21.0.0 submit --platform "$BUILD_PLATFORM" --profile production --path "$BUILD_ARTIFACT_PATH" --non-interactive 2>&1 | node .github/scripts/redact-build-output.cjs
