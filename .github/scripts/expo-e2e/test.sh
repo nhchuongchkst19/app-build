@@ -40,4 +40,5 @@ else
   device_id="$simulator_id"
 fi
 maestro --device "$device_id" test --format junit --output "$root/results/junit.xml" \
-  --debug-output "$root/results/maestro" -e APP_ID="$APP_ID" "$flow" 2>&1 | tee "$root/results/maestro.log"
+  --debug-output "$root/results/maestro" --test-output-dir "$root/results/maestro" \
+  -e APP_ID="$APP_ID" "$flow" 2>&1 | tee "$root/results/maestro.log"
