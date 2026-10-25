@@ -109,3 +109,12 @@ If the target application does not contain `app.json`, the workflow logs that
 the configuration was skipped and continues. Dynamic app config files and
 native `Info.plist` files are not modified. Other iOS profiles and all Android
 builds are unaffected.
+
+## Expo build and automated UI tests
+
+`.github/workflows/expo-e2e.yml` adds standalone Android Emulator / iOS Simulator
+builds and Maestro tests. Choose `build`, `build-test`, or `test`; test-only
+runs reuse a binary-producing run with independently updated test scripts.
+Native build caches are enabled only when this builder is private. Binary and
+report artifacts are retained for 14 days, including by the cleanup workflow.
+See [Expo build/test guide](docs/EXPO-E2E.md) for inputs, examples and limitations.
