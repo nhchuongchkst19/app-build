@@ -14,10 +14,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@b3018382ca039b53d238908238bd35d1fb14f8ee # v2.1.0
+      - name: Delete completed runs, retaining reusable Expo binaries for 14 days
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          retain_days: 0
-          keep_minimum_runs: 0
+          script: |
+            const { owner, repo } = context.repo;
+            // Gather before deleting so pagination cannot skip runs.
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner, repo, per_page: 100,
+            });
+            const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+            for (const run of runs) {
+              if (run.status !== 'completed' || run.id === context.runId) continue;
+              if (run.path === '.github/workflows/expo-e2e.yml'
+                  && Date.parse(run.created_at) >= cutoff) continue;
+              await github.rest.actions.deleteWorkflowRun({ owner, repo, run_id: run.id });
+            }

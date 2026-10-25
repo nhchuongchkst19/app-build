@@ -1,0 +1,36 @@
+name: Check Expo build/test workflow
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/expo-e2e*.yml'
+      - '.github/workflows/clean.yml'
+      - '.github/scripts/expo-e2e/**'
+      - 'tests/expo-e2e*'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/expo-e2e*.yml'
+      - '.github/workflows/clean.yml'
+      - '.github/scripts/expo-e2e/**'
+      - 'tests/expo-e2e*'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.x
+      - name: Validate workflow and shell expressions
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 .github/workflows/expo-e2e.yml .github/workflows/expo-e2e-checks.yml .github/workflows/clean.yml
+      - name: Validate helpers and binary reuse guards
+        run: |
+          for helper in .github/scripts/expo-e2e/*.cjs; do node --check "$helper"; done
+          for helper in .github/scripts/expo-e2e/*.sh; do bash -n "$helper"; done
+          node --test tests/expo-e2e-reuse.test.cjs
