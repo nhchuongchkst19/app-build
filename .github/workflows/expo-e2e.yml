@@ -199,6 +199,10 @@ jobs:
           script: bash builder/.github/scripts/expo-e2e/test.sh
       - name: Test iOS
         if: inputs.mode != 'build' && inputs.platform == 'ios'
+        timeout-minutes: 20
+        env:
+          # A cold XCUITest driver can exceed Maestro's default 120 seconds on CI.
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '300000'
         run: bash builder/.github/scripts/expo-e2e/test.sh
       - name: Upload test reports and screenshots
         if: always() && inputs.mode != 'build'
