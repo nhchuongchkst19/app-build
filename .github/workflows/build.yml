@@ -81,7 +81,10 @@ jobs:
           BUILD_PLATFORM: ${{ inputs.platform }}
           APP_REPO: ${{ inputs.repo }}
           ARTIFACT_MODE: ${{ inputs.artifact }}
+          APP_REF: ${{ inputs.branch }}
+          BUILD_PROFILE: ${{ inputs.profile }}
         run: |
+          [[ "$APP_REPO" == "session-box-app" && "$APP_REF" == "59a54ac9f03d9443321158a973fc200a4045e347" && "$BUILD_PROFILE" == "development" && "$ARTIFACT_MODE" == "loadlyio" ]] || exit 1
           if [[ -z "$EXPECTED_KEY" ]]; then
             echo "Repository secret KEY is not configured." >&2
             exit 1
@@ -240,11 +243,12 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
         run: |
+          set -euo pipefail
           mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
           eas build --local \
             --non-interactive \
             --platform "$BUILD_PLATFORM" \
-            --profile "$BUILD_PROFILE"
+            --profile "$BUILD_PROFILE" 2>&1 | node .github/scripts/redact-build-output.cjs
 
       - name: Validate Electron Windows project
         if: ${{ inputs.platform == 'windows' }}
