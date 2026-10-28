@@ -53,6 +53,7 @@ run_maestro() {
 }
 if run_maestro; then exit 0; else result=$?; fi
 if [[ "$PLATFORM" == ios && ! -s "$root/results/junit.xml" ]] &&
+    ! find "$root/results/maestro" -name commands.json -type f -print -quit | grep -q . &&
     grep -Eq 'iOS driver not ready in time|IOSDriverTimeoutException' "$root/results/maestro.log"; then
   printf '%s\n' '{"reason":"ios-driver-startup-before-any-flow","attempt":2,"startupTimeoutMs":300000}' > "$root/results/driver-retry.json"
   xcrun simctl shutdown "$simulator_id" || true
