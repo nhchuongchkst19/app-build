@@ -39,6 +39,33 @@ else
   xcrun simctl install "$simulator_id" "${apps[0]}"
   device_id="$simulator_id"
 fi
-maestro --device "$device_id" test --format junit --output "$root/results/junit.xml" \
-  --debug-output "$root/results/maestro" --test-output-dir "$root/results/maestro" \
-  -e APP_ID="$APP_ID" "$flow" 2>&1 | tee "$root/results/maestro.log"
+# CI may need longer to attach XCTest on a newly booted iOS simulator.
+# Never retry a flow assertion: only retry before JUnit exists and the driver
+# explicitly failed to start. Keep both attempts in the uploaded artifacts.
+if [[ "$PLATFORM" == ios ]]; then
+  export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-300000}"
+fi
+# Opt-in synthetic data roundtrip harness; production binaries remain unchanged.
+if [[ "$APP_REPO" == session-box-app && ( "$FLOW_PATH" == .maestro/storage/source.yaml || "$FLOW_PATH" == .maestro/storage/isolation.yaml ) ]]; then
+  export STORAGE_DEVICE_ID="$device_id"
+  node test-source/tools/storage-e2e/run.mjs
+  exit $?
+fi
+attempt=1
+run_maestro() {
+  maestro --device "$device_id" test --format junit --output "$root/results/junit.xml" \
+    --debug-output "$root/results/maestro/attempt-$attempt" --test-output-dir "$root/results/maestro/attempt-$attempt" \
+    -e APP_ID="$APP_ID" "$flow" 2>&1 | tee -a "$root/results/maestro.log"
+}
+if run_maestro; then exit 0; else result=$?; fi
+if [[ "$PLATFORM" == ios && ! -s "$root/results/junit.xml" ]] &&
+    ! find "$root/results/maestro" -name commands.json -type f -print -quit | grep -q . &&
+    grep -Eq 'iOS driver not ready in time|IOSDriverTimeoutException' "$root/results/maestro.log"; then
+  printf '%s\n' '{"reason":"ios-driver-startup-before-any-flow","attempt":2,"startupTimeoutMs":300000}' > "$root/results/driver-retry.json"
+  xcrun simctl shutdown "$simulator_id" || true
+  xcrun simctl boot "$simulator_id"
+  xcrun simctl bootstatus "$simulator_id" -b
+  attempt=2
+  if run_maestro; then result=0; else result=$?; fi
+fi
+exit "$result"
