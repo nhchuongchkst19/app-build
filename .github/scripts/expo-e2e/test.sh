@@ -46,7 +46,7 @@ if [[ "$PLATFORM" == ios ]]; then
   export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-300000}"
 fi
 # Opt-in synthetic data roundtrip harness; production binaries remain unchanged.
-if [[ "$APP_REPO" == session-box-app && "$FLOW_PATH" == .maestro/storage/source.yaml ]]; then
+if [[ "$APP_REPO" == session-box-app && ( "$FLOW_PATH" == .maestro/storage/source.yaml || "$FLOW_PATH" == .maestro/storage/isolation.yaml ) ]]; then
   export STORAGE_DEVICE_ID="$device_id"
   node test-source/tools/storage-e2e/run.mjs
   exit $?
