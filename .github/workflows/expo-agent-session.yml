@@ -120,7 +120,7 @@ jobs:
         run: |
           set -euo pipefail
           corepack enable
-          pnpm --dir builder/tools/runner-control install --frozen-lockfile
+          (cd builder/tools/runner-control && pnpm install --frozen-lockfile)
           bash builder/.github/scripts/runner-control/setup-tools.sh
           echo "APP_SOURCE_SHA=$(git -C app rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Enable Android acceleration
