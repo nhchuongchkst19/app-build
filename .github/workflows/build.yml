@@ -244,7 +244,7 @@ jobs:
           eas build --local \
             --non-interactive \
             --platform "$BUILD_PLATFORM" \
-            --profile "$BUILD_PROFILE"
+            --profile "$BUILD_PROFILE" 2>&1 | node "$GITHUB_WORKSPACE/builder/.github/scripts/redact-build-output.cjs"
 
       - name: Validate Electron Windows project
         if: ${{ inputs.platform == 'windows' }}
