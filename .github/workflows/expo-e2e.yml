@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: hoangdaicntt/session-box-app
-          ref: 73b89f9120e2df621ff483ae4125502ce5e8389c
+          ref: 8e5a867556d36224268de6d16752528d69f73dbb
           token: ${{ secrets.GH_TOKEN }}
           path: app
           persist-credentials: false
