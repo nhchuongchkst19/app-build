@@ -84,7 +84,7 @@ jobs:
           APP_REF: ${{ inputs.branch }}
           BUILD_PROFILE: ${{ inputs.profile }}
         run: |
-          [[ "$APP_REPO" == "session-box-app" && "$APP_REF" == "121b35b61fdf0485c1c981ea61b86789d7599f69" && "$BUILD_PROFILE" == "development" && "$ARTIFACT_MODE" == "loadlyio" ]] || exit 1
+          [[ "$APP_REPO" == "session-box-app" && "$APP_REF" == "49c59b9e0bbc9945803441c98a09a339cde4a9b2" && "$BUILD_PROFILE" == "development" && "$ARTIFACT_MODE" == "loadlyio" ]] || exit 1
           if [[ -z "$EXPECTED_KEY" ]]; then
             echo "Repository secret KEY is not configured." >&2
             exit 1
@@ -333,6 +333,12 @@ jobs:
 
           echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
           echo "Artifact: $artifact_path"
+
+      - name: Verify shipped iOS Metro transport policy
+        if: ${{ inputs.platform == 'ios' }}
+        env:
+          IPA_PATH: ${{ steps.artifact.outputs.artifact_path }}
+        run: python3 app/tools/verify-ios-development-transport.py "$IPA_PATH" 3912
 
       - name: Upload GitHub artifact
         if: ${{ inputs.artifact == 'upload' || inputs.artifact == 'loadlyio' }}
