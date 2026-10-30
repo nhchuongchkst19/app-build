@@ -1,0 +1,5 @@
+name: Runner control session
+description: Run session supervisor with GitHub artifact runtime credentials
+runs:
+  using: node24
+  main: src/supervisor.mjs

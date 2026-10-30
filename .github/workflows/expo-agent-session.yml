@@ -143,13 +143,14 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 600
           script: bash builder/.github/scripts/runner-control/run-session.sh
+      - name: Boot iOS simulator
+        if: inputs.platform == 'ios'
+        run: bash builder/.github/scripts/runner-control/boot-ios.sh
       - name: Run iOS control session
         if: inputs.platform == 'ios'
+        uses: ./builder/tools/runner-control
         env:
           RUNNER_KEY: ${{ secrets.KEY }}
-        run: |
-          bash builder/.github/scripts/runner-control/boot-ios.sh
-          bash builder/.github/scripts/runner-control/run-session.sh
       - name: Stop remaining session processes
         if: always()
         run: |

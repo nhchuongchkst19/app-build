@@ -20,6 +20,7 @@ const worker = await createWorker({ token, identity, workspace: process.env.GITH
     stopping = true; clearTimeout(retryTimer); clearTimeout(readyTimer);
     tunnel?.kill('SIGTERM');
     await fs.writeFile(path.join(stateDir, 'exit-code'), summary.result === 'passed' ? '0' : '1');
+    process.exitCode = summary.result === 'passed' ? 0 : 1;
     console.log(`Session finished: ${summary.result}`);
   },
 });
