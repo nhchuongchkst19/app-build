@@ -118,3 +118,6 @@ runs reuse a binary-producing run with independently updated test scripts.
 Native build caches are enabled only when this builder is private. Binary and
 report artifacts are retained for 14 days, including by the cleanup workflow.
 See [Expo build/test guide](docs/EXPO-E2E.md) for inputs, examples and limitations.
+# Interactive agent sessions
+
+Keep a GitHub runner and emulator alive while an AI agent controls shell commands, files, builds and tests over an authenticated WebSocket. See [runner control](docs/RUNNER-CONTROL.md) and the [implementation plan](plans/runner-control.md).

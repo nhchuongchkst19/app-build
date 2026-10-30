@@ -1,0 +1,33 @@
+name: Check runner control
+on:
+  push:
+    branches: [main]
+    paths: ['tools/runner-control/**', '.github/scripts/runner-control/**', '.github/workflows/*session*.yml', '.github/workflows/runner-control-checks.yml']
+  pull_request:
+    paths: ['tools/runner-control/**', '.github/scripts/runner-control/**', '.github/workflows/*session*.yml', '.github/workflows/runner-control-checks.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.x
+      - name: Install isolated dependencies
+        run: |
+          corepack enable
+          pnpm --dir tools/runner-control install --frozen-lockfile
+      - name: Integration tests
+        run: pnpm --dir tools/runner-control test
+      - name: Validate workflows
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 .github/workflows/expo-agent-session.yml .github/workflows/runner-control-checks.yml
+      - name: Syntax checks
+        run: |
+          for file in tools/runner-control/src/*.mjs; do node --check "$file"; done
+          for file in .github/scripts/runner-control/*.sh; do bash -n "$file"; done
+          node --check .github/scripts/runner-control/prepare-app.cjs

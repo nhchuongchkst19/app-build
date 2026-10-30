@@ -1,0 +1,10 @@
+{
+  "name": "@app-build/runner-control",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "packageManager": "pnpm@9.15.9",
+  "scripts": { "test": "node --test test/*.test.mjs", "runnerctl": "node src/cli.mjs" },
+  "dependencies": { "@actions/artifact": "6.3.1", "node-pty": "1.1.0", "ws": "8.22.0" }
+}

@@ -1,0 +1,51 @@
+# Feature: Agent-controlled GitHub runner sessions
+
+## Overview
+An AI agent opens one GitHub Actions job, controls its shell/files/processes through an authenticated WebSocket over Cloudflare Quick Tunnel, iterates on build/test without recreating the runner, then finishes the session. User authorized implementation, push to main and a real Android experiment with `/home/Projects/temp-mail-otp`.
+
+## Current project survey
+- Existing checkout at `/home/Projects/app-build`; preserve unrelated `fix/expo-ios-driver-timeout` commit. Implement from current `origin/main`.
+- Reuse pinned checkout/setup actions and Expo E2E helpers where useful. Keep legacy workflows unchanged.
+- Root package is an old Expo app: isolate control-plane dependencies under `tools/runner-control` with its own pnpm lockfile.
+- Target app: `hoangdaicntt/temp-mail-otp`, main, Expo 57, pnpm 9.15.9, Android ID `com.otpinbox.app`, development client present, no committed Maestro flows. Preserve local untracked Store assets.
+
+## Dependencies and references
+- Node 24, pnpm 9; `ws` 8.22.0, `node-pty` 1.1.0, `@actions/artifact` 6.3.1, pinned lockfile.
+- https://github.com/websockets/ws/blob/master/doc/ws.md
+- https://github.com/microsoft/node-pty
+- https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/
+- https://docs.expo.dev/versions/v57.0.0/
+- https://github.com/actions/toolkit/tree/main/packages/artifact
+
+## Architecture and decisions
+- Worker binds loopback only. cloudflared creates a per-session HTTPS/WSS endpoint; no VPS service or inbound firewall change.
+- Reuse `secrets.KEY`; HMAC-SHA256 with versioned purpose + builder repository + session UUID + GitHub run ID + run attempt. No secret workflow input. CLI uses RUNNER_KEY (or key file) locally. Existing KEY is low entropy/exposed by existing inputs; this inherits that limitation and does not claim to repair it.
+- RPC: session.status/finish, exec.start/list/write/signal/resize, fs.read/write/patch; authenticated HTTP streaming for upload/download. Shell is deliberately unrestricted for this trusted private-control use case.
+- Commands have stable IDs and an in-memory deduplication map for the session. Processes outlive socket disconnects. Append sequenced events to disk, expose bounded replay with cursors, use heartbeat and reconnection. No arbitrary claim of persistence after runner loss.
+- Supervisor restarts failed tunnels and publishes a new non-secret endpoint artifact. CLI discovers current endpoint via gh; metadata pins run/repository/session identity.
+- Endpoint artifacts are uploaded during the running job, not deferred until completion. Output artifacts/logs contain no session token. Mask derived token and remove root key from worker child environment.
+- Workflow inputs: app repo/owner/ref, platform, profile, app ID, session ID, native preparation toggle, emulator API, max and idle lifetime. Android first real validation; iOS toolchain support with simulator startup and same RPC, documented as unverified until exercised.
+- JS iteration uses a development build + Metro; bundled release check available via shell/existing helpers. Never auto-submit to app stores.
+- Final session result determines workflow exit code. Ordinary failed commands do not terminate the worker. Timeouts/cancellation clean process groups and tunnel. Idle timeout measures authenticated application activity, not ping traffic.
+
+## Tasks
+- [x] 1. Implement worker: auth, RPC, shell + PTY, stdin/signals, file operations, binary HTTP transport, process logs/replay, idempotency and lifecycle.
+- [x] 2. Implement supervisor and CLI: gh dispatch/discovery, endpoint publication/replacement, reconnect, exec/wait/logs/files/finish.
+- [x] 3. Add workflow and setup helpers: Android/iOS toolchain, persistent emulator, optional app preparation, tunnel, final artifact collection and cleanup.
+- [x] 4. Add meaningful integration tests for auth rejection, command replay, reconnect, process cancellation, PTY/stdin, file transfer/patch, limits and finish cleanup. Add CI validation and operator documentation.
+- [ ] 5. Run local checks, commit and push main. Dispatch Android session pinned to target app SHA.
+- [ ] 6. Through public WSS, exercise commands and files, failure then repair, build/install/launch target app, run UI test, fetch screenshot, finish, verify job result. Record run URL, source SHA, outcomes and limitations here.
+
+## Validation
+- node --test for real worker/CLI integration; pnpm frozen install; actionlint in Docker; syntax checks.
+- Real Actions experiment must demonstrate public tunnel/auth, reconnect/deduplication, failed command followed by repair, Android app build, emulator interaction and screenshot download in one job. Use temporary runner-only test flow; do not change app source or local Store assets.
+- Monitor with gh; no local EAS build. Finish session explicitly and verify final artifacts. If native build exposes app/toolchain issues, diagnose via the socket and record actual result rather than declare a pass.
+
+## Risks and constraints
+- Quick Tunnel has no SLA; endpoint changes on restart. No SSE. WebSocket ping/reconnect/replay required.
+- GitHub-hosted job maximum six hours; default 120 minutes, idle 15 minutes. Runner loss requires a new session.
+- Any shell authorized here can access files/processes as the runner user; this is not a sandbox for untrusted agents. Do not introduce production signing secrets to the session.
+- Serialize source mutation/build/test at agent level; background Metro/emulator may coexist. RPC does not guess dependency ordering.
+
+## Execution evidence
+Pending.
