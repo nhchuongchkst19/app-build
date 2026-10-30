@@ -57,11 +57,35 @@ For Expo SDK 57, `expo prebuild` recreates native folders by default. For a comp
 
 Bundled verification can use the existing Expo E2E build helper from workspace root (`mkdir -p binary; node builder/.github/scripts/expo-e2e/build.cjs`); pass a valid `APP_ID`. This produces an emulator release binary, not a store submission. The agent remains free to use other build commands.
 
+## Optional Loadly release
+
+The agent can queue one Loadly release while the session is open. The release starts on the **same runner after `finish passed`**, when the worker, Metro and emulator have stopped. It uses the same pinned `hoangdaicntt/telegram-installonair-actions` action, Loadly account ID and Telegram notification as `build.yml`. Queuing does not upload immediately; monitor the release steps using `gh` after finishing the socket session. No release runs unless explicitly queued, and failed/expired/cancelled sessions do not release.
+
+```bash
+# Build a device APK/IPA with this EAS profile, then upload and notify Telegram.
+node src/cli.mjs loadly --profile development --title 'QA build'
+node src/cli.mjs finish passed --reason 'Ready for Loadly'
+
+# Alternatively, queue an existing signed device artifact without rebuilding.
+node src/cli.mjs loadly --path app/release/device.apk --profile preview
+node src/cli.mjs finish passed --reason 'Upload existing APK'
+```
+
+Use the session's `--state FILE` and credential options as usual. `rpc release.loadly '{"profile":"development"}'` exposes the same capability; `path` and `title` are optional. Repeating the same request ID is deduplicated; a different second release request is rejected. `status` includes the queued request. Finish source changes/builds before `finish passed`; EAS builds the final app checkout, including runner-only patches.
+
+With no `--path`, the release runs pinned `npx --yes eas-cli@21.0.0 build --local --non-interactive` using the chosen EAS profile, existing `EXPO_TOKEN`/`GH_MODULE_TOKEN`, and the native-version/iOS-development-HTTP helpers used by `build.yml`. Configure the Android profile to produce an APK (e.g. development, or `android.buildType: apk`); production AABs and simulator archives are rejected. For iOS, use a device profile with signing credentials available to non-interactive EAS builds. This is a separate device build; simulator/emulator binaries are not automatically converted.
+
+With `--path`, the file must already exist inside the runner workspace. Android requires a signed APK containing ARM native libraries; iOS requires an IPA whose app targets `iPhoneOS`. The existing artifact is uploaded as supplied and is not version-bumped. The x86_64-only APK from the emulator test example is rejected. Post-session validation checks the final file again before staging it for upload.
+
+Release secrets (`LOADLYIO_TOKEN`, `TELEGRAM_TOKEN`, `TELEGRAM_TO`, plus EAS credentials when building) are scoped to the release steps and are not added to the socket worker environment. Upload failures fail the job while final evidence upload still runs. `results/loadly/artifact.json` records the binary hash; `results/loadly/release.json` records the upload action outcome and response in the final results artifact. A queued request does not imply publishing succeeded. App Store/Google Play submission is not part of this command.
+
+This addition was implemented without running builds, tests or uploads at the user's request.
+
 ## Protocol
 
 WebSocket `/control`, `Authorization: Bearer SESSION_TOKEN`. JSON requests `{id, method, params}`; responses `{id, result}` or `{id, error: {message}}`. Stable request IDs deduplicate side effects within a running worker; reuse with different parameters is rejected. Limits: 20000 requests and 1000 processes per session, 1 MiB RPC frames, 64 MiB output per process. These protect bounded session memory/disk, not provide a sandbox.
 
-Methods: `session.status`, `session.finish` (`result: passed|failed`), `exec.start`, `exec.get`, `exec.list`, `exec.write` (stdin; optional eof), `exec.signal`, `exec.resize`, `fs.read` (offset/length, optional base64), `fs.write` (atomic replace), `fs.patch` (checked git patch), `events.since` (after/limit).
+Methods: `session.status`, `session.finish` (`result: passed|failed`), `release.loadly` (queue one post-session release), `exec.start`, `exec.get`, `exec.list`, `exec.write` (stdin; optional eof), `exec.signal`, `exec.resize`, `fs.read` (offset/length, optional base64), `fs.write` (atomic replace), `fs.patch` (checked git patch), `events.since` (after/limit).
 
 Events have a monotonically increasing `seq`. The worker retains the last 2000 events in memory and appends all events to disk. Replay returns `oldestSeq`, `latestSeq`, and `truncated` if older events were evicted. Full per-process log paths come from `exec.get`; use HTTP download for older output. WebSocket backpressure disconnects slow clients instead of accumulating unlimited memory. Worker and processes survive socket disconnects; they do not survive runner/worker loss.
 

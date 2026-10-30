@@ -30,4 +30,5 @@ jobs:
         run: |
           for file in tools/runner-control/src/*.mjs; do node --check "$file"; done
           for file in .github/scripts/runner-control/*.sh; do bash -n "$file"; done
+          for file in .github/scripts/runner-control/*.mjs; do node --check "$file"; done
           node --check .github/scripts/runner-control/prepare-app.cjs

@@ -70,3 +70,9 @@ Android experiment completed; worker result and final artifacts verified: https:
 - Local final integration tests: 8 passed; workflow actionlint passed. Earlier remote CI passed at https://github.com/nhchuongchkst19/app-build/actions/runs/41098512322 .
 - As of `2026-10-30T17:56Z`, GitHub Actions/Checks API still reports the full run as in_progress and the final bootstrap/CI as queued, despite their running endpoints, accepted finish commands and downloadable final artifacts. Do not claim a final green GitHub conclusion until the service metadata updates. This does not replace the independently verified worker/UI results.
 - Detailed evidence and reproduction: [experiment report](../docs/RUNNER-CONTROL-EXPERIMENT.md).
+
+## Optional agent-requested Loadly release
+
+Implemented `runnerctl loadly` / `release.loadly` to queue one release in the active session, executed on the same runner after `finish passed`. The agent chooses an EAS profile (default development) or an existing signed device APK/IPA. No request means no release; failed/expired/cancelled sessions skip publishing. Reuses the pinned Loadly/Telegram action and existing secrets from `build.yml`, with release credentials scoped to post-session steps. EAS device builds reuse the existing native-version and iOS development HTTP helpers. Device artifact validation rejects simulator archives, AABs and emulator-only APKs. Upload response and binary hash are saved in the final evidence artifact.
+
+Validation for this addition: JavaScript syntax, whitespace and actionlint only. No tests, workflow dispatch, build or upload were run, as requested by the user. The commit skips automatic CI to avoid starting additional runners for this untested addition.

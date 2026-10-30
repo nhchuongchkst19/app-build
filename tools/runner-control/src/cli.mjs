@@ -49,6 +49,7 @@ async function main() {
 runnerctl status | refresh | exec [--background] [--pty] [--cwd PATH] -- 'shell command'
 runnerctl wait PROCESS_ID | logs PROCESS_ID | rpc METHOD 'JSON_PARAMS' [--id REQUEST_ID]
 runnerctl upload LOCAL REMOTE | download REMOTE LOCAL | patch LOCAL_PATCH
+runnerctl loadly [--profile development] [--path REMOTE_APK_OR_IPA] [--title TEXT]
 runnerctl finish passed|failed [--reason TEXT]
 Global: --state FILE, --key-file FILE. Credential: RUNNER_KEY (never stored in session state).
 start defaults: Android, development, prepare enabled, 120-minute session, 15-minute idle timeout.
@@ -125,6 +126,9 @@ For multiple sessions, choose a different --state FILE for each session.`); retu
       await pipeline(Readable.fromWeb(response.body), createWriteStream(args[1]));
       console.log(path.resolve(args[1]));
     } else if (command === 'patch') json(await call('fs.patch', { patch: await fs.readFile(args[0], 'utf8'), cwd: options.cwd || 'app' }));
+    else if (command === 'loadly') json(await call('release.loadly', {
+      profile: options.profile || 'development', path: options.path, title: options.title,
+    }, options.id || randomUUID()));
     else if (command === 'finish') json(await call('session.finish', { result: args[0], reason: options.reason || '' }));
     else throw Error(`Unknown command ${command}; use help`);
   } finally { client.close(); }

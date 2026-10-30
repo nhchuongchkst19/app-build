@@ -8,6 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import { authorized } from './auth.mjs';
+import { normalizeLoadlyRequest } from './loadly.mjs';
 
 const MAX_RPC = 1024 * 1024;
 function checkString(v, name) {
@@ -23,7 +24,7 @@ export async function createWorker({ token, identity, workspace, stateDir, port 
   workspace = path.resolve(workspace);
   await fsp.mkdir(stateDir, { recursive: true, mode: 0o700 });
   const clients = new Set(), processes = new Map(), requests = new Map(), events = [];
-  let seq = 0, lastActivity = Date.now(), finishing = false, finishPromise;
+  let seq = 0, lastActivity = Date.now(), finishing = false, finishPromise, loadlyRelease = null;
   const startedAt = Date.now();
   const resolvePath = value => path.resolve(workspace, checkString(value, 'path'));
   const redact = value => String(value).split(token).join('[REDACTED]');
@@ -119,7 +120,7 @@ export async function createWorker({ token, identity, workspace, stateDir, port 
       for (const p of processes.values()) signalProcess(p);
       await new Promise(resolve => setTimeout(resolve, 300));
       for (const p of processes.values()) signalProcess(p, 'SIGKILL');
-      const summary = { ...identity, result, reason, startedAt: new Date(startedAt).toISOString(),
+      const summary = { ...identity, result, reason, loadly: loadlyRelease, startedAt: new Date(startedAt).toISOString(),
         finishedAt: new Date().toISOString(), processes: [...processes.values()].map(publicProcess) };
       await fsp.writeFile(path.join(stateDir, 'result.json'), JSON.stringify(summary, null, 2));
       clearInterval(timer); clearInterval(heartbeat);
@@ -135,8 +136,22 @@ export async function createWorker({ token, identity, workspace, stateDir, port 
   async function rpc(method, p = {}) {
     if (!p || typeof p !== 'object' || Array.isArray(p)) throw Error('params must be an object');
     if (finishing) throw Error('Session finishing');
-    if (method === 'session.status') return { ...identity, workspace, stateDir, startedAt, lastActivity, seq,
+    if (method === 'session.status') return { ...identity, workspace, stateDir, startedAt, lastActivity, seq, loadly: loadlyRelease,
       processes: [...processes.values()].map(publicProcess) };
+    if (method === 'release.loadly') {
+      const request = await normalizeLoadlyRequest(p, workspace, process.env.PLATFORM);
+      if (finishing) throw Error('Session finishing');
+      const queued = { ...request, sessionId: identity.sessionId, queuedAt: new Date().toISOString() };
+      try {
+        await fsp.writeFile(path.join(stateDir, 'loadly-request.json'), JSON.stringify(queued, null, 2), { flag: 'wx', mode: 0o600 });
+      } catch (error) {
+        if (error.code === 'EEXIST') throw Error('A Loadly release is already queued for this session');
+        throw error;
+      }
+      loadlyRelease = queued;
+      emit('release.queued', queued);
+      return { ...queued, status: 'queued', startsAfter: 'finish passed' };
+    }
     if (method === 'session.finish') {
       if (!['passed', 'failed'].includes(p.result)) throw Error('result must be passed or failed');
       setTimeout(() => finish(p.result, String(p.reason || '')).catch(console.error), 50);

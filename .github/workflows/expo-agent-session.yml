@@ -159,6 +159,35 @@ jobs:
           if [[ "$PLATFORM" == ios && -f "$SESSION_STATE_DIR/simulator-id" ]]; then
             xcrun simctl shutdown "$(cat "$SESSION_STATE_DIR/simulator-id")" || true
           fi
+      - name: Resolve agent-requested Loadly release
+        id: loadly
+        env:
+          LOADLYIO_TOKEN: ${{ secrets.LOADLYIO_TOKEN }}
+        run: node builder/.github/scripts/runner-control/release-loadly.mjs resolve
+      - name: Build device artifact for Loadly
+        if: steps.loadly.outputs.enabled == 'true' && steps.loadly.outputs.build == 'true'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
+        run: node builder/.github/scripts/runner-control/release-loadly.mjs build
+      - name: Upload to Loadly and notify Telegram
+        id: loadly_upload
+        if: steps.loadly.outputs.enabled == 'true'
+        uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81
+        with:
+          messageTitle: ${{ steps.loadly.outputs.title }}
+          installonairUserId: '74613'
+          telegramUid: ${{ secrets.TELEGRAM_TO }}
+          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
+          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
+          filePath: ${{ steps.loadly.outputs.artifact_path }}
+          method: loadlyio-build
+      - name: Record Loadly release result
+        if: always() && steps.loadly.outputs.enabled == 'true'
+        env:
+          LOADLY_OUTCOME: ${{ steps.loadly_upload.outcome }}
+          LOADLY_OUTPUT: ${{ steps.loadly_upload.outputs.output }}
+        run: node builder/.github/scripts/runner-control/release-loadly.mjs record
       - name: Upload session evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
