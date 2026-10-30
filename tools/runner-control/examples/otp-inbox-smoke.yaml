@@ -2,16 +2,77 @@
 # Install the development APK, start Metro and open its dev-client URL first.
 appId: com.otpinbox.app
 ---
+- launchApp:
+    stopApp: false
+- tapOn:
+    text: "Continue"
+    optional: true
+- runFlow:
+    when:
+      visible: "Reload"
+    commands:
+      - scrollUntilVisible:
+          element: "Tools button"
+          direction: DOWN
+      - tapOn: "Tools button"
+      - back
 - extendedWaitUntil:
     visible: "Settings"
     timeout: 120000
+- tapOn:
+    text: "Inbox"
+    index: 0
+- waitForAnimationToEnd
+- assertVisible: "Your temporary email"
+- copyTextFrom: ".+@.+"
+- evalScript: ${output.email = maestro.copiedText}
+- tapOn:
+    text: "Copy"
+    waitToSettleTimeoutMs: 100
+- tapOn: "Search inbox"
+- longPressOn: "Search sender, subject, or OTP"
+- tapOn: "Paste"
+- assertVisible:
+    text: ${output.email}
+    focused: true
+- takeScreenshot: clipboard-search
+- tapOn: "Close search"
+- tapOn:
+    text: "Refresh"
+    waitToSettleTimeoutMs: 100
+- extendedWaitUntil:
+    visible: "Inbox refreshed."
+    timeout: 30000
+- waitForAnimationToEnd
+- takeScreenshot: inbox
+- tapOn: "QR Code"
+- waitForAnimationToEnd
+- assertVisible: "Scan Email Address"
+- takeScreenshot: qr-code
+- scrollUntilVisible:
+    element: "Copy Address"
+    direction: DOWN
+- tapOn: "Copy Address"
+- back
 - tapOn: "Settings"
+- waitForAnimationToEnd
 - assertVisible: "Preferences"
 - tapOn: "Appearance"
+- waitForAnimationToEnd
 - assertVisible: "Theme"
-- tapOn: "Dark"
+- tapOn:
+    text: "Dark"
+    waitToSettleTimeoutMs: 100
+- assertVisible: "Appearance updated."
+- waitForAnimationToEnd
 - takeScreenshot: dark-appearance
-- tapOn: "Light"
+- tapOn:
+    text: "Light"
+    waitToSettleTimeoutMs: 100
+- assertVisible: "Appearance updated."
+- waitForAnimationToEnd
 - takeScreenshot: light-appearance
 - back
+- waitForAnimationToEnd
 - assertVisible: "Preferences"
+- takeScreenshot: settings

@@ -58,12 +58,13 @@ test('transport retries refresh the endpoint without changing the request id', a
   const { endpoint } = await fixture(t);
   let refreshes = 0;
   const client = new RunnerClient({ ...endpoint, url: 'http://127.0.0.1:1' }, key, {
-    refreshEndpoint: async () => { refreshes++; return endpoint; },
+    retryBaseMs: 5, retryMaxMs: 10,
+    refreshEndpoint: async () => { refreshes++; return refreshes < 5 ? null : endpoint; },
   });
   t.after(() => client.close());
   const result = await client.call('exec.start', { command: 'true' }, 'refresh-test');
   assert.equal((await wait(client, result.processId)).exitCode, 0);
-  assert.equal(refreshes, 1);
+  assert.equal(refreshes, 5);
 });
 
 test('failed command is recoverable; stdin, env and cancellation work', async t => {

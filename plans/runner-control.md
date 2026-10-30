@@ -34,11 +34,11 @@ An AI agent opens one GitHub Actions job, controls its shell/files/processes thr
 - [x] 3. Add workflow and setup helpers: Android/iOS toolchain, persistent emulator, optional app preparation, tunnel, final artifact collection and cleanup.
 - [x] 4. Add meaningful integration tests for auth rejection, command replay, reconnect, process cancellation, PTY/stdin, file transfer/patch, limits and finish cleanup. Add CI validation and operator documentation.
 - [x] 5. Run local checks, commit and push main. Dispatch Android session pinned to target app SHA.
-- [ ] 6. Through public WSS, exercise commands and files, failure then repair, build/install/launch target app, run UI test, fetch screenshot, finish, verify job result. Record run URL, source SHA, outcomes and limitations here.
+- [ ] 6. Through public WSS, exercise commands and files, failure then repair, build/install/launch target app, run UI test, fetch screenshots, rename the app and measure rebuild with/without preserving the native tree, finish, verify job result. Record run URL, source SHA, outcomes and limitations here.
 
 ## Validation
 - node --test for real worker/CLI integration; pnpm frozen install; actionlint in Docker; syntax checks.
-- Real Actions experiment must demonstrate public tunnel/auth, reconnect/deduplication, failed command followed by repair, Android app build, emulator interaction and screenshot download in one job. Use temporary runner-only test flow; do not change app source or local Store assets.
+- Real Actions experiment must demonstrate public tunnel/auth, reconnect/deduplication, failed command followed by repair, Android app build, emulator interaction and screenshot download in one job. Use temporary runner-only test flow; do not change local/committed app source or local Store assets; requested display-name edits happen only in the runner checkout.
 - Monitor with gh; no local EAS build. Finish session explicitly and verify final artifacts. If native build exposes app/toolchain issues, diagnose via the socket and record actual result rather than declare a pass.
 
 ## Risks and constraints
@@ -52,6 +52,12 @@ Android experiment in progress: https://github.com/nhchuongchkst19/app-build/act
 
 - Target SHA: `6a088a1c19f860000a4d8b1b397bdc4f4ad1cae6`.
 - Public WSS verified: auth rejection, shell/PTY/stdin, patch, binary round trip, failed command recovery, reconnect and duplicate request protection.
-- Native build running in the same session.
+- Initial Android debug build succeeded in 13m56s; unchanged incremental build: 20s.
+- Rename `OTP Inbox` -> `OTP Inbox Agent Test`, default Expo 57 prebuild: 163.83s total (3.29s prebuild, 160.54s Gradle).
+- Rename again to `OTP Inbox Agent`, `prebuild --no-clean`: 19.34s total (3.03s prebuild, 16.31s Gradle). APK badging confirms the new native label.
+- Public tunnel replacement reached generation 3; CLI rediscovered the endpoint and retained the same worker/processes. Retry budget was extended to tolerate DNS propagation.
+- Functional flow verifies real OS clipboard by pasting into focused app search, refresh feedback, QR and appearance navigation. Final rerun waits for transition completion and theme-update feedback before screenshots.
+- Metro uses CI=false and --host lan (localhost bound IPv6 only on this runner). Disable the Expo Tools floating button through the dev menu before UI automation; it otherwise overlaps Search.
+- Sample source changes are confined to the runner checkout; local sample and remote app repository remain untouched.
 - Eight local integration tests pass; initial GitHub CI passed.
 - Session setup resolves pnpm from the isolated package directory to avoid Corepack selecting a different version from the workspace root.

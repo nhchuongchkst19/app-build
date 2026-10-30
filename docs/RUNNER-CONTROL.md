@@ -24,7 +24,7 @@ Start options: `--platform android|ios`, `--profile development|release`, `--no-
 
 ```bash
 node src/cli.mjs exec --cwd app -- 'git rev-parse HEAD'
-node src/cli.mjs exec --background --cwd app --timeout 0 -- 'pnpm exec expo start --dev-client --host localhost'
+node src/cli.mjs exec --background --cwd app --timeout 0 --env '{"CI":"false"}' -- 'pnpm exec expo start --dev-client --host lan'
 node src/cli.mjs rpc exec.list
 node src/cli.mjs wait PROCESS_UUID
 node src/cli.mjs logs PROCESS_UUID
@@ -48,10 +48,12 @@ Android development build example (after preparation finishes):
 node src/cli.mjs exec --cwd app/android --timeout 1800000 -- './gradlew :app:assembleDebug --max-workers=2 --build-cache -PreactNativeArchitectures=x86_64'
 node src/cli.mjs exec -- 'adb install -r app/android/app/build/outputs/apk/debug/app-debug.apk'
 node src/cli.mjs exec -- 'adb reverse tcp:8081 tcp:8081'
-node src/cli.mjs exec --background --cwd app --timeout 0 -- 'pnpm exec expo start --dev-client --host localhost'
+node src/cli.mjs exec --background --cwd app --timeout 0 --env '{"CI":"false"}' -- 'pnpm exec expo start --dev-client --host lan'
 # Open your app's development-client deep link, then run uploaded Maestro flows.
 node src/cli.mjs exec -- 'adb exec-out screencap -p > results/screen.png'
 ```
+
+For Expo SDK 57, `expo prebuild` recreates native folders by default. For a compatible display-name/resource change, preserve the generated tree and build outputs with `pnpm exec expo prebuild --platform android --no-install --no-clean` before Gradle. Check the installed CLI help for other SDKs; native dependency/plugin changes may require a clean regeneration. Metro must use `CI=false` for watch/reload behavior. Using `--host lan` avoids localhost resolving to an IPv6-only listener while `adb reverse` connects over IPv4; Metro still stays inside the runner network and is not exposed by the control tunnel.
 
 Bundled verification can use the existing Expo E2E build helper from workspace root (`mkdir -p binary; node builder/.github/scripts/expo-e2e/build.cjs`); pass a valid `APP_ID`. This produces an emulator release binary, not a store submission. The agent remains free to use other build commands.
 

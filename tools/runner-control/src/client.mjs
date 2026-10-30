@@ -4,10 +4,11 @@ import { EventEmitter } from 'node:events';
 import { deriveToken } from './auth.mjs';
 
 export class RunnerClient extends EventEmitter {
-  constructor(endpoint, key, { refreshEndpoint } = {}) {
+  constructor(endpoint, key, { refreshEndpoint, maxAttempts = 12, retryBaseMs = 500, retryMaxMs = 5000 } = {}) {
     super(); this.endpoint = endpoint; this.key = key;
     this.token = deriveToken(key, endpoint); this.pending = new Map();
     this.refreshEndpoint = refreshEndpoint;
+    this.maxAttempts = maxAttempts; this.retryBaseMs = retryBaseMs; this.retryMaxMs = retryMaxMs;
   }
   async connect() {
     if (this.ws?.readyState === WebSocket.OPEN) return;
@@ -34,7 +35,7 @@ export class RunnerClient extends EventEmitter {
   }
   async call(method, params = {}, id = randomUUID()) {
     // Retry only transport failures, keeping the same id for exactly-once side effects within this session.
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt < this.maxAttempts; attempt++) {
       try {
         await this.connect();
         return await new Promise((resolve, reject) => {
@@ -47,9 +48,9 @@ export class RunnerClient extends EventEmitter {
           });
         });
       } catch (error) {
-        if (attempt === 3 || !/disconnected|timeout|timed out|socket hang up|ECONN|ENOTFOUND|Unexpected server response: (502|503|530)/i.test(error.message)) throw error;
+        if (attempt === this.maxAttempts - 1 || !/disconnected|timeout|timed out|socket hang up|ECONN|ENOTFOUND|EAI_AGAIN|Unexpected server response: (502|503|530)/i.test(error.message)) throw error;
         this.ws?.terminate();
-        await new Promise(r => setTimeout(r, 500 * 2 ** attempt));
+        await new Promise(r => setTimeout(r, Math.min(this.retryMaxMs, this.retryBaseMs * 2 ** attempt)));
         if (this.refreshEndpoint) {
           const endpoint = await this.refreshEndpoint();
           if (endpoint) {
