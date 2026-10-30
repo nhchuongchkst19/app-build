@@ -84,7 +84,7 @@ jobs:
           APP_REF: ${{ inputs.branch }}
           BUILD_PROFILE: ${{ inputs.profile }}
         run: |
-          [[ "$APP_REPO" == "session-box-app" && "$APP_REF" == "49c59b9e0bbc9945803441c98a09a339cde4a9b2" && "$BUILD_PROFILE" == "development" && "$ARTIFACT_MODE" == "loadlyio" ]] || exit 1
+          [[ "$APP_REPO" == "session-box-app" && "$APP_REF" == "40cdb08d635ed2016cafda5f34277984e49d1858" && "$BUILD_PROFILE" == "development" && "$ARTIFACT_MODE" == "loadlyio" ]] || exit 1
           if [[ -z "$EXPECTED_KEY" ]]; then
             echo "Repository secret KEY is not configured." >&2
             exit 1
@@ -338,7 +338,7 @@ jobs:
         if: ${{ inputs.platform == 'ios' }}
         env:
           IPA_PATH: ${{ steps.artifact.outputs.artifact_path }}
-        run: python3 app/tools/verify-ios-development-transport.py "$IPA_PATH" 3912
+        run: python3 app/tools/verify-ios-development-transport.py "$IPA_PATH" 3913
 
       - name: Upload GitHub artifact
         if: ${{ inputs.artifact == 'upload' || inputs.artifact == 'loadlyio' }}

@@ -1,214 +1,69 @@
-name: Expo Build and Test
-run-name: expo-e2e | ${{ inputs.platform }} | ${{ inputs.mode }} | ${{ inputs.repo }}@${{ inputs.branch }}
-
+name: Expo E2E
+run-name: Session Spaces synthetic iOS cookie probe
 on:
   workflow_dispatch:
     inputs:
-      repo:
-        description: App repository name under the existing USER secret
-        type: string
-        required: true
-      branch:
-        description: App source branch, tag or SHA (full SHA recommended)
-        type: string
-        default: main
-        required: true
-      platform:
-        type: choice
-        options: [android, ios]
-        default: android
-        required: true
-      mode:
-        description: Build only, reuse a binary to test, or build then test
-        type: choice
-        options: [build-test, build, test]
-        default: build-test
-        required: true
-      binary_run:
-        description: Completed binary-producing run ID; UI tests may have failed (test mode)
-        type: string
-      test_ref:
-        description: Test script ref in the same app repo; blank uses branch
-        type: string
-      flow_path:
-        description: Maestro flow or directory relative to test checkout
-        type: string
-        default: .maestro
-        required: true
-      app_id:
-        description: Expected Android package or iOS bundle identifier
-        type: string
-        required: true
-      ios_scheme:
-        description: Xcode scheme; blank uses the only shared app scheme
-        type: string
       key:
-        description: Existing shared build access key
         type: string
         required: true
-
 permissions:
   contents: read
-  actions: read
-
-# Never cancel a build implicitly when a test is dispatched.
-concurrency:
-  group: expo-e2e-${{ inputs.repo }}-${{ inputs.platform }}-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-  expo:
-    runs-on: ${{ inputs.platform == 'ios' && 'macos-26' || 'ubuntu-latest' }}
-    timeout-minutes: 120
-    defaults:
-      run:
-        shell: bash
-    env:
-      CI: 'true'
-      PLATFORM: ${{ inputs.platform }}
-      MODE: ${{ inputs.mode }}
-      APP_REPO: ${{ inputs.repo }}
-      APP_ID: ${{ inputs.app_id }}
-      FLOW_PATH: ${{ inputs.flow_path }}
-      IOS_SCHEME: ${{ inputs.ios_scheme }}
-      BINARY_RUN: ${{ inputs.binary_run }}
-      MAESTRO_CLI_NO_ANALYTICS: '1'
+  cookie-probe:
+    runs-on: macos-26
+    timeout-minutes: 15
     steps:
-      - name: Validate authorization and inputs
+      - name: Validate authorization
         env:
-          PROVIDED_KEY: ${{ inputs.key }}
-          EXPECTED_KEY: ${{ secrets.KEY }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$EXPECTED_KEY" || "$PROVIDED_KEY" != "$EXPECTED_KEY" ]]; then
-            echo 'Invalid or missing build access key.' >&2; exit 1
-          fi
-          [[ "$APP_REPO" =~ ^[A-Za-z0-9._-]+$ && "$APP_REPO" != '.' && "$APP_REPO" != '..' ]]
-          [[ "$APP_ID" =~ ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$ ]]
-          if [[ "$MODE" == test ]]; then [[ "$BINARY_RUN" =~ ^[0-9]+$ ]]; fi
-      - name: Checkout build tools
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+          PROVIDED: ${{ inputs.key }}
+          EXPECTED: ${{ secrets.KEY }}
+        run: '[[ -n "$EXPECTED" && "$PROVIDED" == "$EXPECTED" ]]'
+      - uses: actions/checkout@v4
         with:
-          path: builder
-          persist-credentials: false
-      - name: Checkout app source
-        if: inputs.mode != 'test'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: ${{ secrets.USER }}/${{ inputs.repo }}
-          ref: ${{ inputs.branch }}
+          repository: hoangdaicntt/session-box-app
+          ref: 40cdb08d635ed2016cafda5f34277984e49d1858
           token: ${{ secrets.GH_TOKEN }}
           path: app
           persist-credentials: false
-      - name: Checkout test scripts independently
-        if: inputs.mode != 'build'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: ${{ secrets.USER }}/${{ inputs.repo }}
-          ref: ${{ inputs.test_ref || inputs.branch }}
-          token: ${{ secrets.GH_TOKEN }}
-          path: test-source
-          persist-credentials: false
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 24.x
-      - name: Setup Java
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Setup Gradle cache
-        if: inputs.platform == 'android' && inputs.mode != 'test'
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
-        with:
-          cache-disabled: ${{ !github.event.repository.private }}
-      - name: Prepare output and validate flow path
-        run: bash builder/.github/scripts/expo-e2e/prepare.sh
-      - name: Install app dependencies and generate native project if absent
-        if: inputs.mode != 'test'
-        run: node builder/.github/scripts/expo-e2e/prepare-app.cjs
-      - name: Resolve toolchain cache identity
-        if: inputs.mode != 'test'
-        id: toolchain
+      - name: Select and boot iPhone simulator
         run: |
-          set -euo pipefail
-          if [[ "$PLATFORM" == ios ]]; then
-            identity="$(xcodebuild -version)-$(xcrun --sdk iphonesimulator --show-sdk-version)"
-          else
-            identity="$(java -version 2>&1)"
-          fi
-          digest=$(printf '%s' "$identity" | shasum -a 256 | cut -d' ' -f1)
-          echo "id=$digest" >> "$GITHUB_OUTPUT"
-      - name: Restore native build outputs (private builder only)
-        if: inputs.mode != 'test' && github.event.repository.private
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: |
-            app/android/.gradle
-            app/android/build
-            app/android/app/build
-            app/.expo-e2e-derived
-            app/ios/Pods
-            ~/Library/Caches/CocoaPods
-          key: expo-e2e-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.repo }}-${{ inputs.platform }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('app/pnpm-lock.yaml', 'app/package-lock.json', 'app/yarn.lock', 'app/app.json', 'app/app.config.*', 'app/ios/Podfile*', 'app/android/gradle/wrapper/gradle-wrapper.properties') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            expo-e2e-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.repo }}-${{ inputs.platform }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('app/pnpm-lock.yaml', 'app/package-lock.json', 'app/yarn.lock', 'app/app.json', 'app/app.config.*', 'app/ios/Podfile*', 'app/android/gradle/wrapper/gradle-wrapper.properties') }}-
-      - name: Build standalone emulator or simulator binary
-        if: inputs.mode != 'test'
-        run: node builder/.github/scripts/expo-e2e/build.cjs
-      - name: Upload reusable binary before UI tests
-        if: inputs.mode != 'test'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: expo-e2e-${{ inputs.platform }}
-          path: binary/
-          if-no-files-found: error
-          retention-days: 14
-          compression-level: 0
-      - name: Download and verify existing binary
-        if: inputs.mode == 'test'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          APP_OWNER: ${{ secrets.USER }}
-        run: node builder/.github/scripts/expo-e2e/reuse.cjs
-      - name: Install pinned Maestro CLI
-        if: inputs.mode != 'build'
+          python3 - <<'PYTHON'
+          import json,subprocess,os
+          devices=json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','-j']))['devices']
+          candidates=[d for runtime,items in devices.items() if 'iOS' in runtime for d in items if 'iPhone' in d['name']]
+          assert candidates
+          device=next((d for d in candidates if d['state']=='Booted'),candidates[0]);udid=device['udid']
+          if device['state']!='Booted':subprocess.run(['xcrun','simctl','boot',udid],check=True)
+          subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True)
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write('PROBE_DEVICE='+udid+'\n')
+          PYTHON
+      - name: Compile synthetic iOS cookie probe
         run: |
-          set -euo pipefail
-          curl --fail --location --retry 3 https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.11.0/maestro.zip -o "$RUNNER_TEMP/maestro.zip"
-          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro-cli"
-          echo "$RUNNER_TEMP/maestro-cli/maestro/bin" >> "$GITHUB_PATH"
-      - name: Enable Android emulator acceleration
-        if: inputs.mode != 'build' && inputs.platform == 'android'
+          mkdir -p CookieProbe.app
+          SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          ARCH=$(uname -m)
+          xcrun swiftc -sdk "$SDK" -target "$ARCH-apple-ios17.0-simulator" app/modules/session-webview/ios/CookieImportPolicy.swift app/tools/cookie-probe/Probe.swift -o CookieProbe.app/CookieProbe
+          python3 - <<'PYTHON'
+          import plistlib
+          with open('CookieProbe.app/Info.plist','wb') as f:plistlib.dump({'CFBundleIdentifier':'com.sessionbox.cookieprobe','CFBundleExecutable':'CookieProbe','CFBundleName':'CookieProbe','CFBundlePackageType':'APPL','CFBundleVersion':'1','CFBundleShortVersionString':'1.0','MinimumOSVersion':'17.0','LSRequiresIPhoneOS':True,'CFBundleSupportedPlatforms':['iPhoneSimulator'],'UIDeviceFamily':[1,2]},f)
+          PYTHON
+          codesign --force --sign - CookieProbe.app
+      - name: Run on iOS and verify readback/deletion
         run: |
-          set -euo pipefail
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Test Android
-        if: inputs.mode != 'build' && inputs.platform == 'android'
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_7_pro
-          disable-animations: true
-          emulator-boot-timeout: 600
-          script: bash builder/.github/scripts/expo-e2e/test.sh
-      - name: Test iOS
-        if: inputs.mode != 'build' && inputs.platform == 'ios'
-        run: bash builder/.github/scripts/expo-e2e/test.sh
-      - name: Upload test reports and screenshots
-        if: always() && inputs.mode != 'build'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: expo-e2e-results-${{ inputs.platform }}
-          path: results/
-          if-no-files-found: warn
-          retention-days: 14
-      - name: Write summary
+          xcrun simctl install "$PROBE_DEVICE" CookieProbe.app
+          xcrun simctl launch "$PROBE_DEVICE" com.sessionbox.cookieprobe
+          CONTAINER=$(xcrun simctl get_app_container "$PROBE_DEVICE" com.sessionbox.cookieprobe data)
+          for attempt in $(seq 1 60); do
+            if [ -f "$CONTAINER/Documents/probe.json" ]; then cp "$CONTAINER/Documents/probe.json" probe-result.json; break; fi
+            sleep 1
+          done
+          python3 - <<'PYTHON'
+          import json
+          r=json.load(open('probe-result.json'));print(json.dumps(r,indent=2));assert r['pass'];assert len(r['rows'])==12;assert r['strictMismatchRejected'];assert r['omittedCookiesAbsent']
+          PYTHON
+      - uses: actions/upload-artifact@v4
         if: always()
-        run: |
-          node builder/.github/scripts/expo-e2e/summary.cjs
+        with:
+          name: synthetic-ios-cookie-probe
+          path: probe-result.json
+          if-no-files-found: ignore
