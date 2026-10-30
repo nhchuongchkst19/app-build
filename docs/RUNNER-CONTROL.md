@@ -78,3 +78,5 @@ On tunnel process exit, supervisor starts a replacement and publishes a new endp
 The worker closes on `finish`, idle timeout or maximum lifetime. Protocol pings do not extend idle time; status/polling do. `finish` stops process groups, writes `result.json`, closes sockets/tunnel and determines the job exit code. Workflow finally uploads session evidence plus workspace `results/` and shuts down the emulator. GitHub force cancellation/runner loss can prevent final artifact upload; endpoint artifacts already published remain available until retention/cleanup.
 
 References: [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/), [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/), [ws](https://github.com/websockets/ws), [node-pty](https://github.com/microsoft/node-pty).
+
+See [the Android experiment](RUNNER-CONTROL-EXPERIMENT.md) for verified commands, screenshots and measured rename rebuild times.

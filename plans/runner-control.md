@@ -34,7 +34,7 @@ An AI agent opens one GitHub Actions job, controls its shell/files/processes thr
 - [x] 3. Add workflow and setup helpers: Android/iOS toolchain, persistent emulator, optional app preparation, tunnel, final artifact collection and cleanup.
 - [x] 4. Add meaningful integration tests for auth rejection, command replay, reconnect, process cancellation, PTY/stdin, file transfer/patch, limits and finish cleanup. Add CI validation and operator documentation.
 - [x] 5. Run local checks, commit and push main. Dispatch Android session pinned to target app SHA.
-- [ ] 6. Through public WSS, exercise commands and files, failure then repair, build/install/launch target app, run UI test, fetch screenshots, rename the app and measure rebuild with/without preserving the native tree, finish, verify job result. Record run URL, source SHA, outcomes and limitations here.
+- [x] 6. Through public WSS, exercise commands and files, failure then repair, build/install/launch target app, run UI test, fetch screenshots, rename the app and measure rebuild with/without preserving the native tree, finish, verify job result. Record run URL, source SHA, outcomes and limitations here.
 
 ## Validation
 - node --test for real worker/CLI integration; pnpm frozen install; actionlint in Docker; syntax checks.
@@ -48,7 +48,7 @@ An AI agent opens one GitHub Actions job, controls its shell/files/processes thr
 - Serialize source mutation/build/test at agent level; background Metro/emulator may coexist. RPC does not guess dependency ordering.
 
 ## Execution evidence
-Android experiment in progress: https://github.com/nhchuongchkst19/app-build/actions/runs/41096035847
+Android experiment completed; worker result and final artifacts verified: https://github.com/nhchuongchkst19/app-build/actions/runs/41096035847
 
 - Target SHA: `6a088a1c19f860000a4d8b1b397bdc4f4ad1cae6`.
 - Public WSS verified: auth rejection, shell/PTY/stdin, patch, binary round trip, failed command recovery, reconnect and duplicate request protection.
@@ -61,3 +61,12 @@ Android experiment in progress: https://github.com/nhchuongchkst19/app-build/act
 - Sample source changes are confined to the runner checkout; local sample and remote app repository remain untouched.
 - Eight local integration tests pass; initial GitHub CI passed.
 - Session setup resolves pnpm from the isolated package directory to avoid Corepack selecting a different version from the workspace root.
+
+## Final lifecycle verification
+- Full session `result.json`: `passed`, finished at `2026-10-30T17:49:06.397Z`; every tracked command is marked stopped. Public endpoint returns 530 after tunnel shutdown.
+- Final renamed-APK Maestro flow: 1/1 passed in 69s. Screenshots downloaded and visually checked (complete QR screen, Dark selected with dark UI, native name in Android App info).
+- Results artifact downloaded successfully to `/tmp/otp-final-artifacts`; includes APK, JUnit, screenshots, source patch, timings and `experiment.json`.
+- Final workflow bootstrap run: https://github.com/nhchuongchkst19/app-build/actions/runs/41101607635 ; Pixel 5/2048M configuration boots, authenticated shell works, `finish passed` accepted and result artifact published.
+- Local final integration tests: 8 passed; workflow actionlint passed. Earlier remote CI passed at https://github.com/nhchuongchkst19/app-build/actions/runs/41098512322 .
+- As of `2026-10-30T17:56Z`, GitHub Actions/Checks API still reports the full run as in_progress and the final bootstrap/CI as queued, despite their running endpoints, accepted finish commands and downloadable final artifacts. Do not claim a final green GitHub conclusion until the service metadata updates. This does not replace the independently verified worker/UI results.
+- Detailed evidence and reproduction: [experiment report](../docs/RUNNER-CONTROL-EXPERIMENT.md).
