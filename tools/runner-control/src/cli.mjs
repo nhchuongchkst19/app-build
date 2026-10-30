@@ -39,6 +39,7 @@ async function discover(state) {
     const endpoint = JSON.parse(await fs.readFile(path.join(temp, 'endpoint.json'), 'utf8'));
     if (endpoint.repository !== state.repository || endpoint.runId !== state.runId || endpoint.sessionId !== state.sessionId ||
         !/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(endpoint.url)) throw Error('Endpoint identity/URL mismatch');
+    if (state.runAttempt && state.runAttempt !== endpoint.runAttempt) throw Error('Runner was replaced by a new run attempt; start a fresh session instead of replaying commands');
     Object.assign(state, endpoint); await save(state); return true;
   } finally { await fs.rm(temp, { recursive: true, force: true }); }
 }
@@ -88,11 +89,11 @@ For multiple sessions, choose a different --state FILE for each session.`); retu
   const key = options['key-file'] ? (await fs.readFile(options['key-file'], 'utf8')).trim() : process.env.RUNNER_KEY;
   if (!key) throw Error('Set RUNNER_KEY or --key-file (the existing builder KEY)');
   if (!state.url) { if (!await discover(state)) throw Error('Endpoint not ready; use refresh'); }
-  const client = new RunnerClient(state, key);
+  const client = new RunnerClient(state, key, { refreshEndpoint: async () => await discover(state) ? state : null });
   async function call(method, params = {}, id = randomUUID()) {
     try { return await client.call(method, params, id); }
     catch (error) {
-      if (!/disconnected|timeout|ECONN|ENOTFOUND|Unexpected server response: (502|503|530)/i.test(error.message)) throw error;
+      if (!/disconnected|timeout|timed out|socket hang up|ECONN|ENOTFOUND|Unexpected server response: (502|503|530)/i.test(error.message)) throw error;
       if (await discover(state)) { client.close(); client.endpoint = state; return client.call(method, params, id); }
       throw error;
     }

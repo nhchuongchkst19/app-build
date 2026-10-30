@@ -33,7 +33,7 @@ An AI agent opens one GitHub Actions job, controls its shell/files/processes thr
 - [x] 2. Implement supervisor and CLI: gh dispatch/discovery, endpoint publication/replacement, reconnect, exec/wait/logs/files/finish.
 - [x] 3. Add workflow and setup helpers: Android/iOS toolchain, persistent emulator, optional app preparation, tunnel, final artifact collection and cleanup.
 - [x] 4. Add meaningful integration tests for auth rejection, command replay, reconnect, process cancellation, PTY/stdin, file transfer/patch, limits and finish cleanup. Add CI validation and operator documentation.
-- [ ] 5. Run local checks, commit and push main. Dispatch Android session pinned to target app SHA.
+- [x] 5. Run local checks, commit and push main. Dispatch Android session pinned to target app SHA.
 - [ ] 6. Through public WSS, exercise commands and files, failure then repair, build/install/launch target app, run UI test, fetch screenshot, finish, verify job result. Record run URL, source SHA, outcomes and limitations here.
 
 ## Validation
@@ -48,4 +48,10 @@ An AI agent opens one GitHub Actions job, controls its shell/files/processes thr
 - Serialize source mutation/build/test at agent level; background Metro/emulator may coexist. RPC does not guess dependency ordering.
 
 ## Execution evidence
-Pending.
+Android experiment in progress: https://github.com/nhchuongchkst19/app-build/actions/runs/41096035847
+
+- Target SHA: `6a088a1c19f860000a4d8b1b397bdc4f4ad1cae6`.
+- Public WSS verified: auth rejection, shell/PTY/stdin, patch, binary round trip, failed command recovery, reconnect and duplicate request protection.
+- Native build running in the same session.
+- Eight local integration tests pass; initial GitHub CI passed.
+- Session setup resolves pnpm from the isolated package directory to avoid Corepack selecting a different version from the workspace root.

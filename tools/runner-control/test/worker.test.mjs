@@ -38,8 +38,10 @@ test('authentication covers HTTP and WebSocket; token is bound to run attempt', 
 test('concurrent duplicate commands execute once and survive disconnect; conflicts rejected', async t => {
   const { client, workspace } = await fixture(t);
   const params = { command: 'sleep 0.1; echo once >> count.txt; echo complete' };
+  const second = new RunnerClient(client.endpoint, key);
+  t.after(() => second.close());
   const [a, b] = await Promise.all([client.call('exec.start', params, 'duplicate'),
-    new RunnerClient(client.endpoint, key).call('session.status').then(() => client.call('exec.start', params, 'duplicate'))]);
+    second.call('exec.start', params, 'duplicate')]);
   assert.equal(a.processId, b.processId);
   // Close all connections, leaving the process on the worker.
   client.ws.terminate(); await new Promise(r => setTimeout(r, 30));
@@ -50,6 +52,18 @@ test('concurrent duplicate commands execute once and survive disconnect; conflic
   await assert.rejects(client.call('exec.start', { command: 'echo changed' }, 'duplicate'), /already used/);
   const replay = await client.call('events.since', { after: 0 });
   assert.ok(replay.events.some(e => e.type === 'exec.output' && e.data.includes('complete')));
+});
+
+test('transport retries refresh the endpoint without changing the request id', async t => {
+  const { endpoint } = await fixture(t);
+  let refreshes = 0;
+  const client = new RunnerClient({ ...endpoint, url: 'http://127.0.0.1:1' }, key, {
+    refreshEndpoint: async () => { refreshes++; return endpoint; },
+  });
+  t.after(() => client.close());
+  const result = await client.call('exec.start', { command: 'true' }, 'refresh-test');
+  assert.equal((await wait(client, result.processId)).exitCode, 0);
+  assert.equal(refreshes, 1);
 });
 
 test('failed command is recoverable; stdin, env and cancellation work', async t => {

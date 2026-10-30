@@ -1,0 +1,17 @@
+# Example only: target app code stays in its own repository.
+# Install the development APK, start Metro and open its dev-client URL first.
+appId: com.otpinbox.app
+---
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 120000
+- tapOn: "Settings"
+- assertVisible: "Preferences"
+- tapOn: "Appearance"
+- assertVisible: "Theme"
+- tapOn: "Dark"
+- takeScreenshot: dark-appearance
+- tapOn: "Light"
+- takeScreenshot: light-appearance
+- back
+- assertVisible: "Preferences"

@@ -4,9 +4,10 @@ import { EventEmitter } from 'node:events';
 import { deriveToken } from './auth.mjs';
 
 export class RunnerClient extends EventEmitter {
-  constructor(endpoint, key) {
+  constructor(endpoint, key, { refreshEndpoint } = {}) {
     super(); this.endpoint = endpoint; this.key = key;
     this.token = deriveToken(key, endpoint); this.pending = new Map();
+    this.refreshEndpoint = refreshEndpoint;
   }
   async connect() {
     if (this.ws?.readyState === WebSocket.OPEN) return;
@@ -46,9 +47,16 @@ export class RunnerClient extends EventEmitter {
           });
         });
       } catch (error) {
-        if (attempt === 3 || !/disconnected|timeout|ECONN|ENOTFOUND|Unexpected server response: (502|503|530)/i.test(error.message)) throw error;
+        if (attempt === 3 || !/disconnected|timeout|timed out|socket hang up|ECONN|ENOTFOUND|Unexpected server response: (502|503|530)/i.test(error.message)) throw error;
         this.ws?.terminate();
         await new Promise(r => setTimeout(r, 500 * 2 ** attempt));
+        if (this.refreshEndpoint) {
+          const endpoint = await this.refreshEndpoint();
+          if (endpoint) {
+            this.endpoint = endpoint;
+            this.token = deriveToken(this.key, endpoint);
+          }
+        }
       }
     }
   }
