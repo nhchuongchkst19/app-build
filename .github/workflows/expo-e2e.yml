@@ -40,7 +40,8 @@ jobs:
       - name: Start synthetic HTTPS fixture
         run: |
           echo '127.0.0.1 a.session-a.test b.session-b.test' | sudo tee -a /etc/hosts > /dev/null
-          openssl req -x509 -newkey rsa:2048 -nodes -keyout fixture-key.pem -out fixture-cert.pem -days 1 -subj '/CN=b.session-b.test' -addext 'subjectAltName=DNS:a.session-a.test,DNS:b.session-b.test' 2>/dev/null
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout fixture-key.pem -out fixture-cert.pem -days 1 -subj '/CN=b.session-b.test' -addext 'subjectAltName=DNS:a.session-a.test,DNS:b.session-b.test' -addext 'extendedKeyUsage=serverAuth' 2>/dev/null
+          xcrun simctl keychain "$PROBE_DEVICE" add-root-cert fixture-cert.pem
           python3 app/tools/cookie-probe/https-fixture.py > /tmp/cookie-fixture.log 2>&1 &
           for attempt in $(seq 1 15); do
             if curl -ks --resolve b.session-b.test:9443:127.0.0.1 https://b.session-b.test:9443/seed > /dev/null; then break; fi
