@@ -84,7 +84,7 @@ jobs:
           APP_REF: ${{ inputs.branch }}
           BUILD_PROFILE: ${{ inputs.profile }}
         run: |
-          [[ "$APP_REPO" == "session-box-app" && "$APP_REF" == "132153feef7cf94e7f22908370aeefca28204007" && "$BUILD_PROFILE" == "development" && "$ARTIFACT_MODE" == "loadlyio" ]] || exit 1
+          [[ "$APP_REPO" == "session-box-app" && "$APP_REF" == "121b35b61fdf0485c1c981ea61b86789d7599f69" && "$BUILD_PROFILE" == "development" && "$ARTIFACT_MODE" == "loadlyio" ]] || exit 1
           if [[ -z "$EXPECTED_KEY" ]]; then
             echo "Repository secret KEY is not configured." >&2
             exit 1
