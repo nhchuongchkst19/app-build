@@ -338,7 +338,9 @@ jobs:
         if: ${{ inputs.platform == 'ios' }}
         env:
           IPA_PATH: ${{ steps.artifact.outputs.artifact_path }}
-        run: python3 app/tools/verify-ios-development-transport.py "$IPA_PATH" 3913
+        run: |
+          EXPECTED_NATIVE_BUILD=$(node -p "require('./app/eas.json').build.development.env.SESSION_BOX_BUILD_NUMBER")
+          python3 app/tools/verify-ios-development-transport.py "$IPA_PATH" "$EXPECTED_NATIVE_BUILD"
 
       - name: Upload GitHub artifact
         if: ${{ inputs.artifact == 'upload' || inputs.artifact == 'loadlyio' }}
