@@ -330,8 +330,25 @@ jobs:
           echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
           echo "Artifact: $artifact_path"
 
+      - name: Verify Tuboo Android development APK
+        if: ${{ inputs.platform == 'android' && inputs.profile == 'development' && inputs.repo == 'tuboo-app' }}
+        shell: bash
+        env:
+          APK_PATH: ${{ steps.artifact.outputs.artifact_path }}
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest print "$APK_PATH" > "$RUNNER_TEMP/tuboo-manifest.xml"
+          python3 - <<'PYVERIFY'
+          import json, os, xml.etree.ElementTree as ET
+          expected = json.load(open('app/constants/app-identity.json'))['appId']
+          root = ET.parse(os.path.join(os.environ['RUNNER_TEMP'], 'tuboo-manifest.xml')).getroot()
+          assert root.attrib['package'] == expected, 'Unexpected application ID'
+          app = root.find('application')
+          assert app.attrib.get('{http://schemas.android.com/apk/res/android}debuggable') == 'true', 'Expected debug APK'
+          print('Verified Android development APK:', expected)
+          PYVERIFY
+
       - name: Upload GitHub artifact
-        if: ${{ inputs.artifact == 'upload' }}
+        if: ${{ inputs.artifact == 'upload' || inputs.artifact == 'loadlyio' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.repo }}-${{ inputs.platform }}-${{ inputs.profile }}-${{ github.run_number }}
@@ -350,14 +367,12 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
 
-      - name: Upload to Loadly and notify Telegram
+      - name: Upload to Loadly
         if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
         uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
           installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
           filePath: ${{ steps.artifact.outputs.artifact_path }}
           method: loadlyio-build
