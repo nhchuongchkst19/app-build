@@ -83,8 +83,8 @@ jobs:
           BUILD_PROFILE: ${{ inputs.profile }}
           ARTIFACT_MODE: ${{ inputs.artifact }}
         run: |
-          if [[ "$APP_REPO" != "session-box-app" || "$BUILD_PROFILE" != "development" || "$ARTIFACT_MODE" != "loadlyio" ]]; then
-            echo "This workflow ref is scoped to Session Spaces development Loadly builds." >&2
+          if [[ "$APP_REPO" != "session-box-app" || "$BUILD_PROFILE" != "production" || "$ARTIFACT_MODE" != "submit" || "$BUILD_PLATFORM" != "ios" ]]; then
+            echo "This workflow ref is scoped to Session Spaces iOS production submissions." >&2
             exit 1
           fi
 
@@ -229,6 +229,23 @@ jobs:
             echo 'org.gradle.caching=true'
           } > "$HOME/.gradle/gradle.properties"
 
+      - name: Record production native identity
+        shell: bash
+        working-directory: app
+        env:
+          SESSION_BOX_BUILD_NUMBER: '3918'
+        run: |
+          mkdir -p "$RUNNER_TEMP/production-evidence"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import { fingerprint, resolvedConfig } from './tools/ota-runtime.mjs';
+          const config = await resolvedConfig('production');
+          if (config.ios.buildNumber !== '3918' || config.ios.bundleIdentifier !== 'com.sessionbox') throw Error('Unexpected production identity');
+          const fp = await fingerprint('production', 'ios');
+          await fs.writeFile(process.env.RUNNER_TEMP + '/production-evidence/native-fingerprint.json', JSON.stringify({target:'production', platform:'ios', runtimeVersion:config.runtimeVersion, url:config.updates.url, hash:fp.hash, sources:fp.sources}, null, 2));
+          console.log('Production native fingerprint:', fp.hash, 'runtime:', config.runtimeVersion);
+          NODE
+
       - name: Build app
         if: ${{ inputs.platform != 'windows' }}
         shell: bash
@@ -341,6 +358,45 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+      - name: Verify production IPA
+        shell: bash
+        env:
+          BUILD_ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
+          APP_SOURCE_SHA: ${{ inputs.branch }}
+        run: |
+          python3 <<'PYIPA'
+          import os, zipfile, plistlib, hashlib, json, pathlib
+          ipa = pathlib.Path(os.environ['BUILD_ARTIFACT_PATH'])
+          with zipfile.ZipFile(ipa) as z:
+              names = [n for n in z.namelist() if n.startswith('Payload/') and n.count('/') == 2 and n.endswith('/Info.plist')]
+              assert len(names) == 1, 'Expected one app Info.plist'
+              info = plistlib.loads(z.read(names[0]))
+              assert info['CFBundleIdentifier'] == 'com.sessionbox'
+              assert info['CFBundleShortVersionString'] == '3.0.0'
+              assert info['CFBundleVersion'] == '3918'
+              root = names[0].rsplit('/', 1)[0]
+              expo = plistlib.loads(z.read(root + '/Expo.plist'))
+              assert str(expo['EXUpdatesRuntimeVersion']) == '30'
+              assert expo['EXUpdatesURL'] == 'https://expo-service.1timetech.com/update/session-box'
+              assert expo['EXUpdatesEnabled'] is True
+              profile = plistlib.loads(__import__('subprocess').check_output(['security','cms','-D','-i','/dev/stdin'],input=z.read(root+'/embedded.mobileprovision')))
+              assert 'ProvisionedDevices' not in profile, 'Expected App Store distribution'
+              assert not profile.get('ProvisionsAllDevices', False), 'Enterprise signing unexpected'
+              assert not profile['Entitlements'].get('get-task-allow', False), 'Debug signing unexpected'
+          digest = hashlib.file_digest(ipa.open('rb'), 'sha256').hexdigest()
+          report = {'sourceSha':os.environ['APP_SOURCE_SHA'],'bundleIdentifier':info['CFBundleIdentifier'],'version':info['CFBundleShortVersionString'],'buildNumber':info['CFBundleVersion'],'runtimeVersion':expo['EXUpdatesRuntimeVersion'],'url':expo['EXUpdatesURL'],'artifactSha256':digest,'fileSizeBytes':ipa.stat().st_size,'distribution':'store'}
+          pathlib.Path(os.environ['RUNNER_TEMP']+'/production-evidence/ipa-validation.json').write_text(json.dumps(report,indent=2)+'\n')
+          print(json.dumps(report))
+          PYIPA
+
+      - name: Retain production evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: session-spaces-production-3918-evidence
+          path: ${{ runner.temp }}/production-evidence/*.json
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Submit app
         if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' }}
         shell: bash
@@ -349,7 +405,9 @@ jobs:
           BUILD_PLATFORM: ${{ inputs.platform }}
           BUILD_ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx --yes eas-cli@21.0.0 submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
+        run: |
+          set -euo pipefail
+          npx --yes eas-cli@21.0.0 submit --platform "$BUILD_PLATFORM" --profile production --path "$BUILD_ARTIFACT_PATH" --non-interactive --wait 2>&1 | node .github/scripts/redact-build-output.cjs
 
       - name: Upload to Loadly
         if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
