@@ -80,8 +80,14 @@ jobs:
           BUILD_OS: ${{ inputs.os }}
           BUILD_PLATFORM: ${{ inputs.platform }}
           APP_REPO: ${{ inputs.repo }}
+          BUILD_PROFILE: ${{ inputs.profile }}
           ARTIFACT_MODE: ${{ inputs.artifact }}
         run: |
+          if [[ "$APP_REPO" != "session-box-app" || "$BUILD_PROFILE" != "development" || "$ARTIFACT_MODE" != "loadlyio" ]]; then
+            echo "This workflow ref is scoped to Session Spaces development Loadly builds." >&2
+            exit 1
+          fi
+
           if [[ -z "$EXPECTED_KEY" ]]; then
             echo "Repository secret KEY is not configured." >&2
             exit 1
@@ -121,7 +127,7 @@ jobs:
       - name: Checkout app source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ${{ secrets.USER }}/${{ inputs.repo }}
+          repository: hoangdaicntt/session-box-app
           ref: ${{ inputs.branch }}
           token: ${{ secrets.GH_TOKEN }}
           path: app
@@ -164,7 +170,7 @@ jobs:
 
       - name: Setup EAS CLI
         if: ${{ inputs.platform != 'windows' }}
-        run: npm install --global eas-cli@21.0.0
+        run: npx --yes eas-cli@21.0.0 --version
 
       - name: Install project dependencies
         shell: bash
@@ -211,12 +217,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ios-pods-${{ inputs.repo }}-
 
-      - name: Update native build version
-        if: ${{ inputs.platform != 'windows' }}
-        env:
-          BUILD_PLATFORM: ${{ inputs.platform }}
-        run: node builder/.github/scripts/update-app-version.cjs app
-
       - name: Configure Gradle memory
         if: ${{ inputs.platform == 'android' }}
         shell: bash
@@ -240,11 +240,12 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
         run: |
+          set -euo pipefail
           mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
-          eas build --local \
+          npx --yes eas-cli@21.0.0 build --local \
             --non-interactive \
             --platform "$BUILD_PLATFORM" \
-            --profile "$BUILD_PROFILE"
+            --profile "$BUILD_PROFILE" 2>&1 | node .github/scripts/redact-build-output.cjs
 
       - name: Validate Electron Windows project
         if: ${{ inputs.platform == 'windows' }}
@@ -348,28 +349,14 @@ jobs:
           BUILD_PLATFORM: ${{ inputs.platform }}
           BUILD_ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
+        run: npx --yes eas-cli@21.0.0 submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
 
-      - name: Upload to Loadly and notify Telegram
+      - name: Upload to Loadly
         if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
         uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
           installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
           filePath: ${{ steps.artifact.outputs.artifact_path }}
           method: loadlyio-build
-
-      - name: Notify Telegram after submission
-        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' }}
-        uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
-        with:
-          messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
-          installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
-          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
-          filePath: ${{ steps.artifact.outputs.artifact_path }}
-          method: send-only
