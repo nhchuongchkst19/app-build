@@ -233,14 +233,14 @@ jobs:
         shell: bash
         working-directory: app
         env:
-          SESSION_BOX_BUILD_NUMBER: '3918'
+          SESSION_BOX_BUILD_NUMBER: '3919'
         run: |
           mkdir -p "$RUNNER_TEMP/production-evidence"
           node --input-type=module <<'NODE'
           import fs from 'node:fs/promises';
           import { fingerprint, resolvedConfig } from './tools/ota-runtime.mjs';
           const config = await resolvedConfig('production');
-          if (config.ios.buildNumber !== '3918' || config.ios.bundleIdentifier !== 'com.sessionbox') throw Error('Unexpected production identity');
+          if (config.ios.buildNumber !== '3919' || config.ios.bundleIdentifier !== 'com.sessionbox') throw Error('Unexpected production identity');
           const fp = await fingerprint('production', 'ios');
           await fs.writeFile(process.env.RUNNER_TEMP + '/production-evidence/native-fingerprint.json', JSON.stringify({target:'production', platform:'ios', runtimeVersion:config.runtimeVersion, url:config.updates.url, hash:fp.hash, sources:fp.sources}, null, 2));
           console.log('Production native fingerprint:', fp.hash, 'runtime:', config.runtimeVersion);
@@ -373,10 +373,24 @@ jobs:
               info = plistlib.loads(z.read(names[0]))
               assert info['CFBundleIdentifier'] == 'com.sessionbox'
               assert info['CFBundleShortVersionString'] == '3.0.0'
-              assert info['CFBundleVersion'] == '3918'
+              assert info['CFBundleVersion'] == '3919'
+              tracking_text = info.get('NSUserTrackingUsageDescription', '')
+              assert isinstance(tracking_text, str) and tracking_text.strip(), 'ATT usage description missing'
               root = names[0].rsplit('/', 1)[0]
+              executable = z.read(root + '/' + info['CFBundleExecutable'])
+              assert b'ExpoTrackingTransparency' in executable, 'Tracking native module missing from executable'
+              localized_permissions = []
+              for language in ['en','vi','es','fr','de','pt-BR','zh-Hans','ja','ko','hi','ru','id']:
+                  raw = z.read(root + '/' + language + '.lproj/InfoPlist.strings')
+                  try:
+                      strings = plistlib.loads(raw)
+                  except Exception:
+                      strings = plistlib.loads(__import__('subprocess').check_output(['plutil','-convert','xml1','-o','-','-'],input=raw))
+                  assert strings.get('NSUserTrackingUsageDescription', '').strip(), 'Missing localized ATT message: ' + language
+                  localized_permissions.append(language)
+
               expo = plistlib.loads(z.read(root + '/Expo.plist'))
-              assert str(expo['EXUpdatesRuntimeVersion']) == '30'
+              assert str(expo['EXUpdatesRuntimeVersion']) == '31'
               assert expo['EXUpdatesURL'] == 'https://expo-service.1timetech.com/update/session-box'
               assert expo['EXUpdatesEnabled'] is True
               profile = plistlib.loads(__import__('subprocess').check_output(['security','cms','-D','-i','/dev/stdin'],input=z.read(root+'/embedded.mobileprovision')))
@@ -384,15 +398,25 @@ jobs:
               assert not profile.get('ProvisionsAllDevices', False), 'Enterprise signing unexpected'
               assert not profile['Entitlements'].get('get-task-allow', False), 'Debug signing unexpected'
           digest = hashlib.file_digest(ipa.open('rb'), 'sha256').hexdigest()
-          report = {'sourceSha':os.environ['APP_SOURCE_SHA'],'bundleIdentifier':info['CFBundleIdentifier'],'version':info['CFBundleShortVersionString'],'buildNumber':info['CFBundleVersion'],'runtimeVersion':expo['EXUpdatesRuntimeVersion'],'url':expo['EXUpdatesURL'],'artifactSha256':digest,'fileSizeBytes':ipa.stat().st_size,'distribution':'store'}
+          report = {'sourceSha':os.environ['APP_SOURCE_SHA'],'bundleIdentifier':info['CFBundleIdentifier'],'version':info['CFBundleShortVersionString'],'buildNumber':info['CFBundleVersion'],'runtimeVersion':expo['EXUpdatesRuntimeVersion'],'url':expo['EXUpdatesURL'],'artifactSha256':digest,'fileSizeBytes':ipa.stat().st_size,'distribution':'store','trackingUsageDescriptionPresent':True,'trackingNativeModulePresent':True,'trackingLocales':localized_permissions}
           pathlib.Path(os.environ['RUNNER_TEMP']+'/production-evidence/ipa-validation.json').write_text(json.dumps(report,indent=2)+'\n')
           print(json.dumps(report))
           PYIPA
 
+      - name: Retain signed IPA for inspection or submission retry
+        if: ${{ always() && steps.artifact.outputs.artifact_path != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: session-spaces-ios-production-3919-ipa
+          path: ${{ steps.artifact.outputs.artifact_path }}
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 0
+
       - name: Retain production evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: session-spaces-production-3918-evidence
+          name: session-spaces-production-3919-evidence
           path: ${{ runner.temp }}/production-evidence/*.json
           retention-days: 14
           if-no-files-found: error
