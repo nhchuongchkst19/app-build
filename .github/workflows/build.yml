@@ -350,14 +350,14 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
 
-      - name: Upload to Loadly and notify Telegram
+      - name: Upload to Loadly
         if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
         uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
           installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
+          telegramUid: ""
+          telegramToken: ""
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
           filePath: ${{ steps.artifact.outputs.artifact_path }}
           method: loadlyio-build
@@ -368,8 +368,8 @@ jobs:
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
           installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
+          telegramUid: ""
+          telegramToken: ""
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
           filePath: ${{ steps.artifact.outputs.artifact_path }}
           method: send-only
