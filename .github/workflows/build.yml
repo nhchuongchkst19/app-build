@@ -1,5 +1,5 @@
 name: Build App
-run-name: ${{ inputs.os }} | ${{ inputs.platform }} | ${{ inputs.profile }} | ${{ inputs.repo }} | ${{ inputs.branch }} | ${{ inputs.artifact }}
+run-name: Upload existing Model Load IPA to Loadly
 
 on:
   workflow_dispatch:
@@ -59,317 +59,38 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: app-build-${{ inputs.repo }}-${{ inputs.branch }}-${{ inputs.platform }}-${{ inputs.profile }}
-  cancel-in-progress: true
+  actions: read
 
 jobs:
-  build:
-    runs-on: ${{ inputs.os }}
-    timeout-minutes: 120
-    env:
-      CI: true
-
+  upload-existing-ipa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Validate authorization and build inputs
-        shell: bash
+      - name: Validate upload request
         env:
           PROVIDED_KEY: ${{ inputs.key }}
           EXPECTED_KEY: ${{ secrets.KEY }}
-          BUILD_OS: ${{ inputs.os }}
-          BUILD_PLATFORM: ${{ inputs.platform }}
-          APP_REPO: ${{ inputs.repo }}
-          ARTIFACT_MODE: ${{ inputs.artifact }}
         run: |
-          if [[ -z "$EXPECTED_KEY" ]]; then
-            echo "Repository secret KEY is not configured." >&2
-            exit 1
-          fi
-
-          if [[ "$PROVIDED_KEY" != "$EXPECTED_KEY" ]]; then
-            echo "Invalid build access key." >&2
-            exit 1
-          fi
-
-          if [[ ! "$APP_REPO" =~ ^[A-Za-z0-9._-]+$ ]]; then
-            echo "Invalid repository name: $APP_REPO" >&2
-            exit 1
-          fi
-
-          if [[ "$BUILD_PLATFORM" == "ios" && "$BUILD_OS" != "macos-26" ]]; then
-            echo "iOS builds require the macos-26 runner." >&2
-            exit 1
-          fi
-
-          if [[ "$BUILD_PLATFORM" == "windows" && "$BUILD_OS" != "windows-latest" ]]; then
-            echo "Electron Windows builds require the windows-latest runner." >&2
-            exit 1
-          fi
-
-          if [[ "$BUILD_PLATFORM" == "windows" && "$ARTIFACT_MODE" != "upload" && "$ARTIFACT_MODE" != "none" ]]; then
-            echo "Electron Windows builds support only upload or none artifact modes." >&2
-            exit 1
-          fi
-
-      - name: Checkout build tools
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+          test -n "$EXPECTED_KEY"
+          test "$PROVIDED_KEY" = "$EXPECTED_KEY"
+          test '${{ inputs.platform }}' = ios
+          test '${{ inputs.artifact }}' = loadlyio
+      - name: Checkout upload helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           path: builder
           persist-credentials: false
-
-      - name: Checkout app source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ${{ secrets.USER }}/${{ inputs.repo }}
-          ref: ${{ inputs.branch }}
-          token: ${{ secrets.GH_TOKEN }}
-          path: app
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.x
-
-      - name: Configure project package manager
-        shell: bash
-        working-directory: app
-        run: |
-          corepack enable
-
-          lockfile_count=0
-          package_manager=""
-
-          if [[ -f pnpm-lock.yaml ]]; then
-            package_manager="pnpm"
-            ((lockfile_count += 1))
-          fi
-          if [[ -f yarn.lock ]]; then
-            package_manager="yarn"
-            ((lockfile_count += 1))
-          fi
-          if [[ -f package-lock.json ]]; then
-            package_manager="npm"
-            ((lockfile_count += 1))
-          fi
-
-          if [[ "$lockfile_count" -ne 1 ]]; then
-            echo "Expected exactly one committed lockfile; found $lockfile_count." >&2
-            exit 1
-          fi
-
-          echo "Using $package_manager from the committed lockfile."
-
-      - name: Setup EAS CLI
-        if: ${{ inputs.platform != 'windows' }}
-        run: npm install --global eas-cli@21.0.0
-
-      - name: Install project dependencies
-        shell: bash
-        working-directory: app
-        run: |
-          if [[ -f pnpm-lock.yaml ]]; then
-            pnpm install --frozen-lockfile --prefer-offline
-          elif [[ -f yarn.lock ]]; then
-            yarn install --frozen-lockfile --prefer-offline
-          else
-            npm ci --prefer-offline
-          fi
-
-          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['verify:versions'] ? 0 : 1)"; then
-            if [[ -f pnpm-lock.yaml ]]; then
-              pnpm run verify:versions
-            elif [[ -f yarn.lock ]]; then
-              yarn run verify:versions
-            else
-              npm run verify:versions
-            fi
-          fi
-
-      - name: Allow HTTP for iOS development builds
-        if: ${{ inputs.platform == 'ios' && inputs.profile == 'development' }}
-        run: node builder/.github/scripts/configure-ios-development-http.cjs app
-
-      - name: Setup Gradle
-        if: ${{ inputs.platform == 'android' }}
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.1.0
-        with:
-          cache-provider: basic
-          cache-disabled: ${{ !github.event.repository.private }}
-          add-job-summary: on-failure
-
-      - name: Restore CocoaPods cache
-        if: ${{ inputs.platform == 'ios' && github.event.repository.private }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/Library/Caches/CocoaPods
-            ~/.cocoapods/repos
-          key: ${{ runner.os }}-ios-pods-${{ inputs.repo }}-${{ hashFiles('app/pnpm-lock.yaml', 'app/yarn.lock', 'app/package-lock.json', 'app/ios/Podfile.lock', 'app/eas.json', 'app/app.json', 'app/app.config.*') }}
-          restore-keys: |
-            ${{ runner.os }}-ios-pods-${{ inputs.repo }}-
-
-      - name: Update native build version
-        if: ${{ inputs.platform != 'windows' }}
+      - name: Download already signed IPA
         env:
-          BUILD_PLATFORM: ${{ inputs.platform }}
-        run: node builder/.github/scripts/update-app-version.cjs app
-
-      - name: Configure Gradle memory
-        if: ${{ inputs.platform == 'android' }}
-        shell: bash
-        run: |
-          mkdir -p "$HOME/.gradle"
-          {
-            echo 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8'
-            echo 'org.gradle.parallel=true'
-            echo 'org.gradle.daemon=false'
-            echo 'org.gradle.caching=true'
-          } > "$HOME/.gradle/gradle.properties"
-
-      - name: Build app
-        if: ${{ inputs.platform != 'windows' }}
-        shell: bash
-        working-directory: app
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 43549703964 --repo nhchuongchkst19/app-build --name mobile-apps-ios-development-2510 --dir download
+      - name: Verify and upload IPA to Loadly
         env:
-          BUILD_PLATFORM: ${{ inputs.platform }}
-          BUILD_PROFILE: ${{ inputs.profile }}
-          EAS_LOCAL_BUILD_ARTIFACTS_DIR: ${{ runner.temp }}/eas-artifacts
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
-        run: |
-          mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
-          eas build --local \
-            --non-interactive \
-            --platform "$BUILD_PLATFORM" \
-            --profile "$BUILD_PROFILE"
-
-      - name: Validate Electron Windows project
-        if: ${{ inputs.platform == 'windows' }}
-        shell: bash
-        working-directory: app
-        run: |
-          set -euo pipefail
-          [[ -f pnpm-lock.yaml ]] || { echo "Electron Windows builds require a committed pnpm-lock.yaml." >&2; exit 1; }
-          node <<'NODE'
-          const pkg = require('./package.json');
-          const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-          if (!deps.electron) throw new Error('The Windows project must declare Electron.');
-          if (!pkg.scripts?.['build:win']) throw new Error('Required package script not found: build:win');
-          NODE
-
-      - name: Provision optional Windows signing certificate
-        if: ${{ inputs.platform == 'windows' }}
-        shell: bash
-        env:
-          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$WINDOWS_CERTIFICATE_BASE64" ]]; then
-            echo "No Windows signing certificate configured; producing an unsigned review artifact."
-            exit 0
-          fi
-          certificate_path="$RUNNER_TEMP/windows-signing.pfx"
-          printf '%s' "$WINDOWS_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
-          echo "CSC_LINK=$certificate_path" >> "$GITHUB_ENV"
-          echo "CSC_KEY_PASSWORD=$WINDOWS_CERTIFICATE_PASSWORD" >> "$GITHUB_ENV"
-
-      - name: Build Electron Windows app
-        if: ${{ inputs.platform == 'windows' }}
-        shell: bash
-        working-directory: app
-        run: pnpm build:win
-
-      - name: Locate build artifact
-        id: artifact
-        shell: bash
-        env:
-          ARTIFACT_DIR: ${{ runner.temp }}/eas-artifacts
-          BUILD_PLATFORM: ${{ inputs.platform }}
-        run: |
-          set -euo pipefail
-          if [[ "$BUILD_PLATFORM" == "windows" ]]; then
-            artifact_dir="$GITHUB_WORKSPACE/app/release"
-            mapfile -t artifacts < <(find "$artifact_dir" -maxdepth 1 -type f \
-              \( -name '*.exe' -o -name '*.msi' -o -name '*.zip' -o -name 'release-metadata.json' \) -print | sort)
-            if [[ "${#artifacts[@]}" -lt 1 ]]; then
-              echo "No Windows EXE, MSI, ZIP, or release metadata found in $artifact_dir." >&2
-              find "$artifact_dir" -maxdepth 2 -type f -print >&2 || true
-              exit 1
-            fi
-            {
-              echo 'artifact_path<<EOF'
-              printf '%s\n' "${artifacts[@]}"
-              echo 'EOF'
-            } >> "$GITHUB_OUTPUT"
-            printf 'Windows artifact: %s\n' "${artifacts[@]}"
-            exit 0
-          fi
-
-          artifact_count=0
-          artifact_path=""
-
-          while IFS= read -r candidate; do
-            artifact_count=$((artifact_count + 1))
-            artifact_path="$candidate"
-          done < <(
-            find "$ARTIFACT_DIR" -type f \
-              \( -name '*.apk' -o -name '*.aab' -o -name '*.ipa' \) \
-              -print
-          )
-
-          if [[ "$artifact_count" -ne 1 ]]; then
-            echo "Expected exactly one APK, AAB, or IPA in $ARTIFACT_DIR; found $artifact_count." >&2
-            find "$ARTIFACT_DIR" -type f -print >&2
-            exit 1
-          fi
-
-          echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
-          echo "Artifact: $artifact_path"
-
-      - name: Upload GitHub artifact
-        if: ${{ inputs.artifact == 'upload' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+          LOADLYIO_TOKEN: ${{ secrets.LOADLYIO_TOKEN }}
+        run: python3 builder/.github/scripts/upload-model-load-ipa.py
+      - name: Save installation result
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: ${{ inputs.repo }}-${{ inputs.platform }}-${{ inputs.profile }}-${{ github.run_number }}
-          path: ${{ steps.artifact.outputs.artifact_path }}
-          if-no-files-found: error
+          name: model-load-ios-loadly-result
+          path: release.json
           retention-days: 7
-          compression-level: 0
-
-      - name: Submit app
-        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' }}
-        shell: bash
-        working-directory: app
-        env:
-          BUILD_PLATFORM: ${{ inputs.platform }}
-          BUILD_ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
-
-      - name: Upload to Loadly and notify Telegram
-        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
-        uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
-        with:
-          messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
-          installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
-          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
-          filePath: ${{ steps.artifact.outputs.artifact_path }}
-          method: loadlyio-build
-
-      - name: Notify Telegram after submission
-        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' }}
-        uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
-        with:
-          messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
-          installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
-          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
-          filePath: ${{ steps.artifact.outputs.artifact_path }}
-          method: send-only
