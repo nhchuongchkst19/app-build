@@ -223,8 +223,9 @@ jobs:
         run: |
           mkdir -p "$HOME/.gradle"
           {
-            echo 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8'
-            echo 'org.gradle.parallel=true'
+            echo 'org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8'
+            echo 'org.gradle.parallel=false'
+            echo 'org.gradle.workers.max=2'
             echo 'org.gradle.daemon=false'
             echo 'org.gradle.caching=true'
           } > "$HOME/.gradle/gradle.properties"
@@ -244,7 +245,7 @@ jobs:
           eas build --local \
             --non-interactive \
             --platform "$BUILD_PLATFORM" \
-            --profile "$BUILD_PROFILE"
+            --profile "$BUILD_PROFILE" 2>&1 | node "$GITHUB_WORKSPACE/builder/.github/scripts/redact-eas-output.cjs"
 
       - name: Validate Electron Windows project
         if: ${{ inputs.platform == 'windows' }}
@@ -331,7 +332,7 @@ jobs:
           echo "Artifact: $artifact_path"
 
       - name: Upload GitHub artifact
-        if: ${{ inputs.artifact == 'upload' }}
+        if: ${{ inputs.artifact == 'upload' || inputs.artifact == 'loadlyio' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.repo }}-${{ inputs.platform }}-${{ inputs.profile }}-${{ github.run_number }}
@@ -350,14 +351,13 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
 
-      - name: Upload to Loadly and notify Telegram
+      - name: Upload to Loadly
+        id: loadly
         if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
         uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
           installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
           filePath: ${{ steps.artifact.outputs.artifact_path }}
           method: loadlyio-build
@@ -368,8 +368,23 @@ jobs:
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
           installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
           filePath: ${{ steps.artifact.outputs.artifact_path }}
           method: send-only
+
+      - name: Save Loadly result
+        if: ${{ inputs.artifact == 'loadlyio' }}
+        shell: bash
+        env:
+          LOADLY_RESULT: ${{ steps.loadly.outputs.output }}
+        run: |
+          mkdir -p build-report
+          node -e 'const fs=require("fs"); const r=JSON.parse(process.env.LOADLY_RESULT); fs.writeFileSync("build-report/loadly.json",JSON.stringify(r,null,2));'
+
+      - name: Upload Loadly result
+        if: ${{ inputs.artifact == 'loadlyio' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: loadly-${{ inputs.platform }}-${{ github.run_number }}
+          path: build-report/loadly.json
+          retention-days: 7
