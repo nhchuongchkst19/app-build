@@ -240,6 +240,7 @@ jobs:
           EAS_LOCAL_BUILD_ARTIFACTS_DIR: ${{ runner.temp }}/eas-artifacts
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
           eas build --local \
