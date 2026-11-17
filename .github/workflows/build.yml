@@ -239,12 +239,13 @@ jobs:
           EAS_LOCAL_BUILD_ARTIFACTS_DIR: ${{ runner.temp }}/eas-artifacts
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
           eas build --local \
             --non-interactive \
             --platform "$BUILD_PLATFORM" \
-            --profile "$BUILD_PROFILE"
+            --profile "$BUILD_PROFILE" 2>&1 | node "$GITHUB_WORKSPACE/builder/.github/scripts/redact-eas-output.cjs"
 
       - name: Validate Electron Windows project
         if: ${{ inputs.platform == 'windows' }}
@@ -331,7 +332,7 @@ jobs:
           echo "Artifact: $artifact_path"
 
       - name: Upload GitHub artifact
-        if: ${{ inputs.artifact == 'upload' }}
+        if: ${{ inputs.artifact == 'upload' || inputs.artifact == 'submit' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.repo }}-${{ inputs.platform }}-${{ inputs.profile }}-${{ github.run_number }}
@@ -348,28 +349,15 @@ jobs:
           BUILD_PLATFORM: ${{ inputs.platform }}
           BUILD_ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
+        run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --profile production --non-interactive --wait 2>&1 | node "$GITHUB_WORKSPACE/builder/.github/scripts/redact-eas-output.cjs"
 
-      - name: Upload to Loadly and notify Telegram
+      - name: Upload to Loadly
         if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
         uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
           installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
           loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
           filePath: ${{ steps.artifact.outputs.artifact_path }}
           method: loadlyio-build
 
-      - name: Notify Telegram after submission
-        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' }}
-        uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
-        with:
-          messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
-          installonairUserId: '74613'
-          telegramUid: ${{ secrets.TELEGRAM_TO }}
-          telegramToken: ${{ secrets.TELEGRAM_TOKEN }}
-          loadlyIoToken: ${{ secrets.LOADLYIO_TOKEN }}
-          filePath: ${{ steps.artifact.outputs.artifact_path }}
-          method: send-only
