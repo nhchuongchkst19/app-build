@@ -229,6 +229,28 @@ jobs:
             echo 'org.gradle.caching=true'
           } > "$HOME/.gradle/gradle.properties"
 
+      - name: Restore Audio Truyen iOS signing
+        if: ${{ inputs.platform == 'ios' && inputs.repo == 'mobile-apps' && inputs.branch == 'audio-truyen' }}
+        shell: bash
+        working-directory: app
+        env:
+          AUDIO_IOS_SIGNING: ${{ secrets.AUDIO_TRUYEN_IOS_SIGNING }}
+          AUDIO_BUILD_PROFILE: ${{ inputs.profile }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          if (!process.env.AUDIO_IOS_SIGNING) throw new Error('Audio Truyen iOS signing secret is missing');
+          const signing = JSON.parse(process.env.AUDIO_IOS_SIGNING);
+          fs.mkdirSync('credentials/ios', { recursive: true, mode: 0o700 });
+          fs.writeFileSync('credentials/ios/dist-cert.p12', Buffer.from(signing.certificate, 'base64'), { mode: 0o600 });
+          fs.writeFileSync('credentials/ios/profile.mobileprovision', Buffer.from(signing.profile, 'base64'), { mode: 0o600 });
+          fs.writeFileSync('credentials.json', JSON.stringify({ ios: signing.ios }), { mode: 0o600 });
+          const eas = JSON.parse(fs.readFileSync('eas.json', 'utf8'));
+          eas.build[process.env.AUDIO_BUILD_PROFILE].credentialsSource = 'local';
+          fs.writeFileSync('eas.json', JSON.stringify(eas, null, 2));
+          console.log('Restored local iOS signing for Audio Truyen.');
+          NODE
+
       - name: Build app
         if: ${{ inputs.platform != 'windows' }}
         shell: bash
