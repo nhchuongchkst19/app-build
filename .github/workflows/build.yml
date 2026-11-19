@@ -230,7 +230,7 @@ jobs:
           } > "$HOME/.gradle/gradle.properties"
 
       - name: Restore Audio Truyen iOS signing
-        if: ${{ inputs.platform == 'ios' && inputs.repo == 'mobile-apps' && inputs.branch == 'audio-truyen' }}
+        if: ${{ inputs.platform == 'ios' && inputs.profile == 'development' && inputs.repo == 'mobile-apps' && inputs.branch == 'audio-truyen' }}
         shell: bash
         working-directory: app
         env:
