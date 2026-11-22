@@ -131,6 +131,7 @@ jobs:
         if: inputs.platform == 'macos'
         shell: bash
         run: |
+          export SESSION_STATE_DIR="$RUNNER_TEMP/runner-control"
           echo "SESSION_STATE_DIR=$RUNNER_TEMP/runner-control" >> "$GITHUB_ENV"
           bash builder/.github/scripts/runner-control/setup-tools.sh
 

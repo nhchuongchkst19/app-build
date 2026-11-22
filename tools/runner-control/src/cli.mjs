@@ -36,7 +36,8 @@ async function discover(state) {
   if (!item) return false;
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'runner-endpoint-'));
   try {
-    gh(['run', 'download', state.runId, '--repo', state.repository, '--name', item.name, '--dir', temp]);
+    try { gh(['run', 'download', state.runId, '--repo', state.repository, '--name', item.name, '--dir', temp]); }
+    catch { return false; }
     const endpoint = JSON.parse(await fs.readFile(path.join(temp, 'endpoint.json'), 'utf8'));
     if (endpoint.repository !== state.repository || endpoint.runId !== state.runId || endpoint.sessionId !== state.sessionId ||
         !/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(endpoint.url)) throw Error('Endpoint identity/URL mismatch');
