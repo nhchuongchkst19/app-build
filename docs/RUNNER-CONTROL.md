@@ -16,9 +16,20 @@ node src/cli.mjs status --state /tmp/otp-session.json
 
 Native PTY requires a compiler/make/Python on supported Unix systems; GitHub Ubuntu/macOS images have them. On a thin CLI-only host, `pnpm install --frozen-lockfile --ignore-scripts` suffices for the CLI (PTY executes remotely). Use Docker for local PTY build/tests if host software changes are not authorized.
 
-`start` dispatches `expo-agent-session.yml` using `gh`, identifies the run by its UUID, then downloads its non-secret endpoint artifact while the job is still running. A state file stores only endpoint metadata; use different `--state` files for simultaneous sessions. `--builder OWNER/REPO` and `--workflow-ref REF` select a different builder. Session dispatch requires normal GitHub authorization. The public tunnel requires a derived session credential.
+`start` dispatches the matching Expo, native-mobile, Electron/Tauri or native-desktop agent-session workflow using `gh`, identifies the run by its UUID, then downloads its non-secret endpoint artifact while the job is still running. A state file stores only endpoint metadata; use different `--state` files for simultaneous sessions. `--builder OWNER/REPO` and `--workflow-ref REF` select a different builder. Session dispatch requires normal GitHub authorization. The public tunnel requires a derived session credential.
 
 Start options: `--platform android|ios`, `--profile development|release`, `--no-prepare`, `--max-minutes 120` (5..330), `--idle-minutes 15` (1..60), `--api-level 35`. Both platforms boot a device. App dependency installation/prebuild is a normal recoverable worker command, visible in `status`; wait for it before building. Preparation failure leaves the session open for repair. iOS is implemented but must be tested separately on a macOS runner.
+
+Desktop options: `--platform windows|macos`, `--framework electron|tauri`, and optional `--project-path PATH`. Desktop sessions install locked JavaScript dependencies and fetch locked Tauri Rust dependencies, but leave build and test commands to the agent so the target repository's scripts remain authoritative. Windows commands run in PowerShell; macOS commands run in Bash. No Expo/EAS, mobile device, signing credential, Loadly action or store submission is added to a desktop session.
+
+Native options use `--framework native`. Android/iOS dispatch `native-mobile-agent-session.yml`; Windows/macOS dispatch `native-desktop-agent-session.yml`. Native desktop accepts `--toolchain auto|winui3|dotnet|msbuild|xcode|swiftpm|cmake`. Native test sessions never fetch signing credentials and cannot queue Loadly.
+
+```bash
+node src/cli.mjs start --repo OWNER/APP --ref FULL_COMMIT_SHA --platform windows --framework electron --state /tmp/app-windows-session.json
+node src/cli.mjs start --repo OWNER/APP --ref FULL_COMMIT_SHA --platform macos --framework tauri --project-path desktop --state /tmp/app-macos-session.json
+node src/cli.mjs start --repo OWNER/APP --ref FULL_COMMIT_SHA --platform android --framework native --app-id com.example.app --state /tmp/native-android.json
+node src/cli.mjs start --repo OWNER/APP --ref FULL_COMMIT_SHA --platform windows --framework native --toolchain winui3 --state /tmp/native-windows.json
+```
 
 ## Control
 
@@ -40,6 +51,8 @@ node src/cli.mjs finish passed --reason 'Smoke test passed after repair'
 
 Append `--state /tmp/otp-session.json` to commands when not using the default state file. `exec` waits by default and returns the command's exit code; `--background` returns a process ID immediately. Its default remote timeout is 600000 ms; `--timeout 0` leaves a background process alive until explicitly stopped or the session ends. `--env '{"NAME":"value"}'` supplies per-command environment. `cwd` resolves relative to the Actions workspace, which contains `app/` and `builder/`. Each ordinary exec has its own shell; use explicit cwd/env or a persistent PTY for shell state.
 
+Desktop tests should use the project's existing scripts and harness. Electron UI/E2E tests normally use Playwright's Electron support on the native runner. Tauri should use its existing WebDriver/native harness where supported; otherwise run frontend Playwright plus Rust/unit/integration checks and report that native UI interaction was not covered. Save test reports, logs and screenshots under `results/` for retrieval before session cleanup.
+
 A failed command never ends the job. Agent mutations/builds/tests must be ordered explicitly; independent background processes may run concurrently. Reload/relaunch and reset app state before a deterministic UI flow.
 
 Android development build example (after preparation finishes):
@@ -58,6 +71,8 @@ For Expo SDK 57, `expo prebuild` recreates native folders by default. For a comp
 Bundled verification can use the existing Expo E2E build helper from workspace root (`mkdir -p binary; node builder/.github/scripts/expo-e2e/build.cjs`); pass a valid `APP_ID`. This produces an emulator release binary, not a store submission. The agent remains free to use other build commands.
 
 ## Optional Loadly release
+
+This section applies only to Android/iOS sessions. Desktop sessions reject `loadly`; use the dedicated Electron or Tauri build workflow for packaged desktop artifacts.
 
 The agent can queue one Loadly release while the session is open. The release starts on the **same runner after `finish passed`**, when the worker, Metro and emulator have stopped. It uses the same pinned `hoangdaicntt/telegram-installonair-actions` action, Loadly account ID and Telegram notification as `build.yml`. Queuing does not upload immediately; monitor the release steps using `gh` after finishing the socket session. No release runs unless explicitly queued, and failed/expired/cancelled sessions do not release.
 

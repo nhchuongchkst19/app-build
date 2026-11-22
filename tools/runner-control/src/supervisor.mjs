@@ -25,8 +25,14 @@ const worker = await createWorker({ token, identity, workspace: process.env.GITH
   },
 });
 if (process.env.PREPARE_APP === 'true') {
+  const prepareScripts = {
+    desktop: 'builder/.github/scripts/runner-control/prepare-desktop.cjs',
+    'native-mobile': 'builder/.github/scripts/runner-control/prepare-native-mobile.cjs',
+    'native-desktop': 'builder/.github/scripts/runner-control/prepare-native-desktop.cjs',
+  };
+  const prepareScript = prepareScripts[process.env.SESSION_KIND] || 'builder/.github/scripts/runner-control/prepare-app.cjs';
   const preparation = await worker.rpc('exec.start', {
-    command: 'node builder/.github/scripts/runner-control/prepare-app.cjs', timeoutMs: 1200000,
+    command: `node ${prepareScript}`, timeoutMs: 1200000,
   });
   console.log(`Initial app preparation process: ${preparation.processId}`);
 }

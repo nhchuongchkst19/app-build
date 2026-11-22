@@ -48,6 +48,11 @@ export async function createWorker({ token, identity, workspace, stateDir, port 
   function signalProcess(p, signal = 'SIGTERM') {
     if (p.finishedAt) return;
     if (!['SIGINT', 'SIGTERM', 'SIGKILL', 'SIGHUP'].includes(signal)) throw Error('Unsupported signal');
+    if (process.platform === 'win32') {
+      try { execFileSync('taskkill.exe', ['/pid', String(p.child.pid), '/t', '/f'], { stdio: 'ignore' }); }
+      catch { try { p.child.kill(); } catch {} }
+      return;
+    }
     // PTY children also own a process group on Unix; kill descendants as well.
     try { process.kill(-p.child.pid, signal); } catch (e) {
       if (e.code !== 'ESRCH') throw e;
@@ -68,14 +73,19 @@ export async function createWorker({ token, identity, workspace, stateDir, port 
     const id = randomUUID(), logPath = path.join(stateDir, `${id}.log`);
     const log = fs.createWriteStream(logPath, { mode: 0o600 });
     let child;
+    const windows = process.platform === 'win32';
+    const shell = windows ? 'pwsh.exe' : '/bin/bash';
+    const shellArgs = windows
+      ? ['-NoLogo', '-NoProfile', ...(pty ? [] : ['-NonInteractive']), '-Command', command]
+      : ['--noprofile', '--norc', '-c', command];
     try {
       if (pty) {
         // Loaded lazily so ordinary shell control remains available without native PTY support.
         const ptyModule = ptyLoader();
-        child = ptyModule.spawn('/bin/bash', ['--noprofile', '--norc', '-c', command], {
+        child = ptyModule.spawn(shell, shellArgs, {
           cwd, env, name: 'xterm-256color', cols: integer(params.cols, 120, 1, 500), rows: integer(params.rows, 40, 1, 500),
         });
-      } else child = spawn('/bin/bash', ['--noprofile', '--norc', '-c', command], { cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+      } else child = spawn(shell, shellArgs, { cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (e) { log.end(); throw e; }
     const p = { id, command, cwd, child, pty, logPath, startedAt: new Date().toISOString() };
     processes.set(id, p);
@@ -139,6 +149,9 @@ export async function createWorker({ token, identity, workspace, stateDir, port 
     if (method === 'session.status') return { ...identity, workspace, stateDir, startedAt, lastActivity, seq, loadly: loadlyRelease,
       processes: [...processes.values()].map(publicProcess) };
     if (method === 'release.loadly') {
+      if (process.env.SESSION_KIND && process.env.SESSION_KIND !== 'expo') {
+        throw Error('Loadly release is available only in Expo mobile sessions');
+      }
       const request = await normalizeLoadlyRequest(p, workspace, process.env.PLATFORM);
       if (finishing) throw Error('Session finishing');
       const queued = { ...request, sessionId: identity.sessionId, queuedAt: new Date().toISOString() };

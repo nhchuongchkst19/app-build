@@ -8,6 +8,7 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { RunnerClient } from './client.mjs';
+import { sessionDispatch } from './session-config.mjs';
 
 const argv = process.argv.slice(2), options = {}, args = [];
 for (let i = 0; i < argv.length; i++) {
@@ -45,14 +46,16 @@ async function discover(state) {
 }
 async function main() {
   if (!command || command === 'help') {
-    console.log(`runnerctl start --repo OWNER/APP --ref SHA [--platform android|ios] [--profile development|release] [--app-id ID]
+    console.log(`runnerctl start --repo OWNER/APP --ref SHA [--platform android|ios|windows|macos]
+  Mobile: [--framework expo|native] [--profile development|release] [--app-id ID] [--project-path PATH]
+  Desktop: --framework electron|tauri|native [--project-path PATH] [--toolchain TOOLCHAIN]
 runnerctl status | refresh | exec [--background] [--pty] [--cwd PATH] -- 'shell command'
 runnerctl wait PROCESS_ID | logs PROCESS_ID | rpc METHOD 'JSON_PARAMS' [--id REQUEST_ID]
 runnerctl upload LOCAL REMOTE | download REMOTE LOCAL | patch LOCAL_PATCH
 runnerctl loadly [--profile development] [--path REMOTE_APK_OR_IPA] [--title TEXT]
 runnerctl finish passed|failed [--reason TEXT]
 Global: --state FILE, --key-file FILE. Credential: RUNNER_KEY (never stored in session state).
-start defaults: Android, development, prepare enabled, 120-minute session, 15-minute idle timeout.
+start defaults: Android Expo, development, prepare enabled, 120-minute session, 15-minute idle timeout.
 For multiple sessions, choose a different --state FILE for each session.`); return;
   }
   if (command === 'start') {
@@ -60,18 +63,15 @@ For multiple sessions, choose a different --state FILE for each session.`); retu
     const app = options.repo;
     if (!app || !/^[\w.-]+\/[\w.-]+$/.test(app)) throw Error('--repo OWNER/APP required');
     const sessionId = randomUUID(), [owner, repo] = app.split('/');
-    const inputs = { repo, owner, branch: options.ref || 'main', platform: options.platform || 'android',
-      profile: options.profile || 'development', app_id: options['app-id'] || '', session_id: sessionId,
-      prepare_app: options['no-prepare'] ? 'false' : 'true', max_minutes: options['max-minutes'] || '120',
-      idle_minutes: options['idle-minutes'] || '15', api_level: options['api-level'] || '35' };
-    gh(['workflow', 'run', 'expo-agent-session.yml', '--repo', repository, '--ref', options['workflow-ref'] || 'main',
+    const { platform, workflow, inputs } = sessionDispatch(options, owner, repo, sessionId);
+    gh(['workflow', 'run', workflow, '--repo', repository, '--ref', options['workflow-ref'] || 'main',
       ...Object.entries(inputs).flatMap(([k, v]) => ['-f', `${k}=${v}`])]);
     console.log(`Dispatched session ${sessionId}`);
-    const state = { repository, sessionId };
+    const state = { repository, sessionId, workflow, platform };
     const deadline = Date.now() + 15 * 60000;
     while (Date.now() < deadline) {
       if (!state.runId) {
-        const runs = JSON.parse(gh(['run', 'list', '--repo', repository, '--workflow', 'expo-agent-session.yml', '--limit', '30',
+        const runs = JSON.parse(gh(['run', 'list', '--repo', repository, '--workflow', workflow, '--limit', '30',
           '--json', 'databaseId,displayTitle,status,conclusion,url']));
         const run = runs.find(r => r.displayTitle.includes(sessionId));
         if (run) { state.runId = String(run.databaseId); state.runUrl = run.url; await save(state); console.log(run.url); }

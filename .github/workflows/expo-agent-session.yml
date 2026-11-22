@@ -63,6 +63,7 @@ jobs:
         shell: bash
     env:
       CI: 'true'
+      SESSION_KIND: expo
       PLATFORM: ${{ inputs.platform }}
       BUILD_PROFILE: ${{ inputs.profile }}
       APP_OWNER: ${{ inputs.owner || secrets.USER }}
