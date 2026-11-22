@@ -22,6 +22,9 @@ const worker = await createWorker({ token, identity, workspace: process.env.GITH
     await fs.writeFile(path.join(stateDir, 'exit-code'), summary.result === 'passed' ? '0' : '1');
     process.exitCode = summary.result === 'passed' ? 0 : 1;
     console.log(`Session finished: ${summary.result}`);
+    // A GUI app or Windows pipe can keep a hosted runner's Node event loop alive after cleanup.
+    // The result is already persisted, so enforce a bounded supervisor shutdown.
+    setTimeout(() => process.exit(process.exitCode), 1000);
   },
 });
 if (process.env.PREPARE_APP === 'true') {
