@@ -15,7 +15,13 @@ if (!fs.existsSync(projectRoot)) throw Error(`Desktop project directory not foun
 const executable = command => process.platform === 'win32' && ['corepack', 'pnpm', 'npm', 'yarn'].includes(command)
   ? `${command}.cmd`
   : command;
-const run = (command, args, cwd = projectRoot) => execFileSync(executable(command), args, { cwd, stdio: 'inherit' });
+const run = (command, args, cwd = projectRoot, options = {}) => {
+  const program = executable(command);
+  const invocation = process.platform === 'win32' && program.endsWith('.cmd')
+    ? [process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', program, ...args]]
+    : [program, args];
+  return execFileSync(invocation[0], invocation[1], { cwd, stdio: 'inherit', ...options });
+};
 const packageFile = path.join(projectRoot, 'package.json');
 
 function installJavaScriptDependencies() {
@@ -31,7 +37,7 @@ function installJavaScriptDependencies() {
     run('npm', ['ci']);
   } else if (lock === 'yarn.lock') {
     run('corepack', ['enable']);
-    const version = execFileSync(executable('yarn'), ['--version'], { cwd: projectRoot, encoding: 'utf8' }).trim();
+    const version = run('yarn', ['--version'], projectRoot, { stdio: ['ignore', 'pipe', 'inherit'], encoding: 'utf8' }).trim();
     run('yarn', ['install', version.startsWith('1.') ? '--frozen-lockfile' : '--immutable']);
   } else {
     run('bun', ['install', '--frozen-lockfile']);
