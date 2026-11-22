@@ -89,7 +89,13 @@ export async function createWorker({ token, identity, workspace, stateDir, port 
         child = ptyModule.spawn(shell, shellArgs, {
           cwd, env, name: 'xterm-256color', cols: integer(params.cols, 120, 1, 500), rows: integer(params.rows, 40, 1, 500),
         });
-      } else child = spawn(shell, shellArgs, { cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+      } else child = spawn(shell, shellArgs, {
+        cwd, env,
+        // Detached PowerShell can return success without running -EncodedCommand on hosted Windows runners.
+        // taskkill /t already provides process-tree cleanup there; Unix still needs a process group.
+        detached: !windows,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
     } catch (e) { log.end(); throw e; }
     const p = { id, command, cwd, child, pty, logPath, startedAt: new Date().toISOString() };
     processes.set(id, p);
