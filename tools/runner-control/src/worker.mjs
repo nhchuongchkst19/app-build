@@ -11,6 +11,10 @@ import { authorized } from './auth.mjs';
 import { normalizeLoadlyRequest } from './loadly.mjs';
 
 const MAX_RPC = 1024 * 1024;
+export function powershellArgs(command, { pty = false } = {}) {
+  const encoded = Buffer.from(command, 'utf16le').toString('base64');
+  return ['-NoLogo', '-NoProfile', ...(pty ? [] : ['-NonInteractive']), '-EncodedCommand', encoded];
+}
 function checkString(v, name) {
   if (typeof v !== 'string' || !v.length || v.includes('\0')) throw Error(`Invalid ${name}`);
   return v;
@@ -76,7 +80,7 @@ export async function createWorker({ token, identity, workspace, stateDir, port 
     const windows = process.platform === 'win32';
     const shell = windows ? 'pwsh.exe' : '/bin/bash';
     const shellArgs = windows
-      ? ['-NoLogo', '-NoProfile', ...(pty ? [] : ['-NonInteractive']), '-Command', command]
+      ? powershellArgs(command, { pty })
       : ['--noprofile', '--norc', '-c', command];
     try {
       if (pty) {

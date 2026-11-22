@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { WebSocket } from 'ws';
 import { deriveToken } from '../src/auth.mjs';
-import { createWorker } from '../src/worker.mjs';
+import { createWorker, powershellArgs } from '../src/worker.mjs';
 import { RunnerClient } from '../src/client.mjs';
 
 const identity = { repository: 'test/builder', sessionId: 'unique-session', runId: '123', runAttempt: '1' };
@@ -22,6 +22,15 @@ async function fixture(t, overrides = {}) {
   return { dir, workspace, worker, client, endpoint, token };
 }
 async function wait(client, id) { return client.wait(id, { output: false, pollMs: 20, timeoutMs: 5000 }); }
+
+test('PowerShell commands use UTF-16 encoded input so Windows preserves the complete script', () => {
+  const command = 'Write-Output "hello world"; $value = "a&b"; pnpm run test:e2e';
+  const args = powershellArgs(command);
+  assert.deepEqual(args.slice(0, 3), ['-NoLogo', '-NoProfile', '-NonInteractive']);
+  assert.equal(args[3], '-EncodedCommand');
+  assert.equal(Buffer.from(args[4], 'base64').toString('utf16le'), command);
+  assert.equal(powershellArgs(command, { pty: true }).includes('-NonInteractive'), false);
+});
 
 test('authentication covers HTTP and WebSocket; token is bound to run attempt', async t => {
   const { endpoint, client, token } = await fixture(t);
