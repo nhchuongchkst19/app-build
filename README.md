@@ -143,3 +143,12 @@ The source repository is fixed to prevent accidental credential use with an
 unrelated application, and action dependencies are pinned to commit SHAs.
 Temporary signing files and the keychain are removed even after failures.
 Existing EAS workflows keep their existing input contract.
+
+For native iOS releases, `runner_os` defaults to `macos-26`. If that pool is
+queued, `macos-15` is also supported and explicitly selects the installed
+Xcode 26.3 instead of the image's default Xcode 16.4. The workflow checks that
+the selected iPhoneOS SDK is version 26 or later before signing or uploading.
+See the [official runner image inventory](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md)
+and [Apple's SDK requirements](https://developer.apple.com/news/upcoming-requirements/?id=04282026a).
+Cancel and verify the previous queued job has stopped before dispatching a
+replacement with the same application build number.

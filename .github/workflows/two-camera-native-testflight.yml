@@ -8,6 +8,12 @@ on:
         description: Immutable mobile-apps commit SHA to publish
         required: true
         type: string
+      runner_os:
+        description: macOS runner pool; macos-15 explicitly selects Xcode 26.3
+        required: true
+        type: choice
+        default: macos-26
+        options: [macos-26, macos-15]
       build:
         description: Unique numeric TestFlight build number
         required: true
@@ -22,7 +28,7 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: macos-26
+    runs-on: ${{ inputs.runner_os || 'macos-26' }}
     timeout-minutes: 60
     steps:
       - name: Validate release inputs
@@ -43,6 +49,21 @@ jobs:
           token: ${{ secrets.GH_TOKEN }}
           path: app
           persist-credentials: false
+
+      - name: Select supported release toolchain
+        shell: bash
+        env:
+          RELEASE_RUNNER: ${{ inputs.runner_os || 'macos-26' }}
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_RUNNER" == 'macos-15' ]]; then
+            test -d /Applications/Xcode_26.3.app || { echo 'Required Xcode 26.3 is unavailable'; exit 1; }
+            sudo xcode-select --switch /Applications/Xcode_26.3.app
+          fi
+          xcodebuild -version
+          sdk_version=$(xcrun --sdk iphoneos --show-sdk-version)
+          [[ "$sdk_version" =~ ^([0-9]+) ]] && (( BASH_REMATCH[1] >= 26 )) || { echo 'An iOS 26 or newer SDK is required'; exit 1; }
+          echo "Release iOS SDK: $sdk_version"
 
       - name: Install XcodeGen
         run: brew install xcodegen
