@@ -1,0 +1,71 @@
+name: Verify native TestFlight access
+run-name: Verify native TestFlight access | ${{ inputs.build }}
+on:
+  workflow_dispatch:
+    inputs:
+      app_ref:
+        description: Immutable application commit used for the existing uploaded build
+        type: string
+        required: true
+      build:
+        description: Existing uploaded build number; does not build or upload an IPA
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: two-camera-native-testflight
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate existing release inputs
+        env:
+          APP_REF: ${{ inputs.app_ref }}
+          RELEASE_BUILD: ${{ inputs.build }}
+        run: |
+          set -euo pipefail
+          [[ "$APP_REF" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_BUILD" =~ ^[0-9]+$ ]]
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: hoangdaicntt/mobile-apps
+          ref: ${{ inputs.app_ref }}
+          token: ${{ secrets.GH_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Inspect and verify internal distribution
+        env:
+          ASC_JSON: ${{ secrets.TWO_CAMERA_ASC }}
+          TWO_CAMERA_RELEASE_BUILD: ${{ inputs.build }}
+          APP_REF: ${{ inputs.app_ref }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { request } = require('./scripts/asc-api.cjs');
+          const { ensureTestFlightAccess } = require('./scripts/testflight-access.cjs');
+          (async () => {
+            const app = '6818375772';
+            const groups = await request(`/v1/apps/${app}/betaGroups?limit=200`);
+            for (const group of groups.data || []) {
+              console.log('Group configuration:', JSON.stringify({id: group.id, name: group.attributes.name, isInternalGroup: group.attributes.isInternalGroup, hasAccessToAllBuilds: group.attributes.hasAccessToAllBuilds}));
+            }
+            const builds = await request(`/v1/builds?filter[app]=${app}&filter[version]=${process.env.TWO_CAMERA_RELEASE_BUILD}&limit=1`);
+            const build = builds.data?.[0];
+            if (!build || build.attributes.processingState !== 'VALID') throw Error('Expected an existing VALID uploaded build');
+            fs.writeFileSync('release-receipt.json', JSON.stringify({sha: process.env.APP_REF, bundleId: 'hd.ssh.now.vn', version: '1.0.0', build: process.env.TWO_CAMERA_RELEASE_BUILD, processingState: build.attributes.processingState, uploadedDate: build.attributes.uploadedDate}, null, 2));
+            await ensureTestFlightAccess();
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
+      - name: Retain distribution receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: two-camera-testflight-access-receipt
+          path: release-receipt.json
+          retention-days: 7
+          if-no-files-found: ignore
