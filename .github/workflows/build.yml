@@ -162,9 +162,25 @@ jobs:
 
           echo "Using $package_manager from the committed lockfile."
 
+      - name: Prepare native iOS delivery wrapper
+        id: native_ios
+        if: ${{ inputs.platform == 'ios' }}
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          adapter=native/ios/Scripts/prepare-eas.cjs
+          if [[ -f "$adapter" ]]; then
+            node --test native/ios/Scripts/prepare-eas.test.cjs
+            node "$adapter"
+            echo "active=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "active=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup EAS CLI
         if: ${{ inputs.platform != 'windows' }}
-        run: npm install --global eas-cli@21.0.0
+        run: npx --yes eas-cli@21.0.0 --version
 
       - name: Install project dependencies
         shell: bash
@@ -217,6 +233,10 @@ jobs:
           BUILD_PLATFORM: ${{ inputs.platform }}
         run: node builder/.github/scripts/update-app-version.cjs app
 
+      - name: Synchronize native iOS archive version
+        if: ${{ steps.native_ios.outputs.active == 'true' }}
+        run: node app/native/ios/Scripts/prepare-eas.cjs --sync-version
+
       - name: Configure Gradle memory
         if: ${{ inputs.platform == 'android' }}
         shell: bash
@@ -263,7 +283,7 @@ jobs:
           GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
         run: |
           mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
-          eas build --local \
+          npx --yes eas-cli@21.0.0 build --local \
             --non-interactive \
             --platform "$BUILD_PLATFORM" \
             --profile "$BUILD_PROFILE"
@@ -370,7 +390,7 @@ jobs:
           BUILD_PLATFORM: ${{ inputs.platform }}
           BUILD_ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
+        run: npx --yes eas-cli@21.0.0 submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
 
       - name: Upload to Loadly and notify Telegram
         if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
@@ -385,7 +405,7 @@ jobs:
           method: loadlyio-build
 
       - name: Notify Telegram after submission
-        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' }}
+        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' && steps.native_ios.outputs.active != 'true' }}
         uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
