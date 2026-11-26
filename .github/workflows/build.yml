@@ -196,7 +196,7 @@ jobs:
 
       - name: Setup EAS CLI
         if: ${{ inputs.platform != 'windows' }}
-        run: npx --yes eas-cli@21.0.0 --version
+        run: npx --yes eas-cli@27.11.0 --version
 
       - name: Install project dependencies
         shell: bash
@@ -299,7 +299,7 @@ jobs:
           GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
         run: |
           mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
-          npx --yes eas-cli@21.0.0 build --local \
+          npx --yes eas-cli@27.11.0 build --local \
             --non-interactive \
             --platform "$BUILD_PLATFORM" \
             --profile "$BUILD_PROFILE" 2>&1 | node ../builder/.github/scripts/redact-eas-build-log.cjs
@@ -406,7 +406,7 @@ jobs:
           BUILD_PLATFORM: ${{ inputs.platform }}
           BUILD_ARTIFACT_PATH: ${{ steps.artifact.outputs.artifact_path }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx --yes eas-cli@21.0.0 submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
+        run: npx --yes eas-cli@27.11.0 submit --platform "$BUILD_PLATFORM" --path "$BUILD_ARTIFACT_PATH" --non-interactive
 
       - name: Upload to Loadly and notify Telegram
         if: ${{ inputs.platform != 'windows' && inputs.artifact == 'loadlyio' }}
