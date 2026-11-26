@@ -1,9 +1,10 @@
 # App Build Workflow
 
 This repository hosts manually dispatched builders for EAS apps, Tauri apps,
-and Electron desktop apps:
+Electron desktop apps, and native iOS releases:
 
 - `.github/workflows/build.yml`: Android/iOS EAS local builds and Electron Windows builds.
+- `.github/workflows/two-camera-native-testflight.yml`: signed native Swift iOS releases to TestFlight.
 - `.github/workflows/tauri.yml`: Windows, macOS, and Linux Tauri builds.
 - `.github/workflows/electron.yml`: Windows, macOS, and Linux Electron builds,
   including MSIX packages on Windows.
@@ -121,3 +122,24 @@ See [Expo build/test guide](docs/EXPO-E2E.md) for inputs, examples and limitatio
 # Interactive agent sessions
 
 Keep a GitHub runner and emulator alive while an AI agent controls shell commands, files, builds and tests over an authenticated WebSocket. See [runner control](docs/RUNNER-CONTROL.md) and the [implementation plan](plans/runner-control.md).
+
+## Native iOS TestFlight
+
+`two-camera-native-testflight.yml` publishes the 2-camera native Swift app from
+`hoangdaicntt/mobile-apps`. Dispatch with an immutable 40-character `app_ref`
+commit SHA and a unique numeric `build`. It uses XcodeGen and the application's
+`scripts/native-testflight.sh`; JavaScript dependencies and EAS are not required.
+The release script archives, uploads, waits for Apple's VALID processing state,
+and verifies access through the internal `test` group. A seven-day JSON receipt
+records the application SHA and TestFlight status. It does not upload signing
+files or the IPA as an Actions artifact.
+
+Only authenticated users with workflow dispatch permission can start releases.
+This native workflow deliberately has no key or token input: workflow inputs
+are visible as run metadata and must never carry credentials. Signing values
+are stored only in the central repository's `TWO_CAMERA_IOS_SIGNING` and
+`TWO_CAMERA_ASC` Actions secrets. The read-only checkout token is `GH_TOKEN`.
+The source repository is fixed to prevent accidental credential use with an
+unrelated application, and action dependencies are pinned to commit SHAs.
+Temporary signing files and the keychain are removed even after failures.
+Existing EAS workflows keep their existing input contract.

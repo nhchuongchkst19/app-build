@@ -1,0 +1,85 @@
+name: Native iOS TestFlight
+run-name: Native iOS TestFlight | mobile-apps | ${{ inputs.app_ref }} | ${{ inputs.build }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_ref:
+        description: Immutable mobile-apps commit SHA to publish
+        required: true
+        type: string
+      build:
+        description: Unique numeric TestFlight build number
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: two-camera-native-testflight
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Validate release inputs
+        shell: bash
+        env:
+          APP_REF: ${{ inputs.app_ref }}
+          RELEASE_BUILD: ${{ inputs.build }}
+        run: |
+          set -euo pipefail
+          [[ "$APP_REF" =~ ^[0-9a-f]{40}$ ]] || { echo 'An immutable commit SHA is required'; exit 1; }
+          [[ "$RELEASE_BUILD" =~ ^[0-9]+$ ]] || { echo 'Invalid build number'; exit 1; }
+
+      - name: Checkout native application
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: hoangdaicntt/mobile-apps
+          ref: ${{ inputs.app_ref }}
+          token: ${{ secrets.GH_TOKEN }}
+          path: app
+          persist-credentials: false
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Verify release automation
+        working-directory: app
+        run: node --test scripts/tests/testflight-access.test.cjs
+
+      - name: Archive, upload and verify internal TestFlight access
+        working-directory: app
+        env:
+          SIGNING_JSON: ${{ secrets.TWO_CAMERA_IOS_SIGNING }}
+          ASC_JSON: ${{ secrets.TWO_CAMERA_ASC }}
+          TWO_CAMERA_RELEASE_BUILD: ${{ inputs.build }}
+          APP_REF: ${{ inputs.app_ref }}
+        run: |
+          export GITHUB_SHA="$APP_REF"
+          bash scripts/native-testflight.sh
+
+      - name: Retain verified release receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: two-camera-native-testflight-receipt
+          path: app/release-receipt.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Remove temporary signing material
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/two-camera.keychain-db" || true
+          python3 - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          shutil.rmtree(root / 'two-camera-signing', ignore_errors=True)
+          (Path.home() / 'Library/MobileDevice/Provisioning Profiles/two-camera.mobileprovision').unlink(missing_ok=True)
+          PY
