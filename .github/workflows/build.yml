@@ -178,6 +178,22 @@ jobs:
             echo "active=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Configure native iOS archive tools
+        if: ${{ steps.native_ios.outputs.active == 'true' }}
+        shell: bash
+        run: |
+          ruby_bin="$(brew --prefix ruby)/bin"
+          export PATH="$ruby_bin:$PATH"
+          gem_bin="$(ruby -rrubygems -e 'puts Gem.bindir')"
+          export PATH="$gem_bin:$PATH"
+          echo "$ruby_bin" >> "$GITHUB_PATH"
+          echo "$gem_bin" >> "$GITHUB_PATH"
+          command -v pod >/dev/null || gem install cocoapods -v 1.16.2 --no-document
+          command -v fastlane >/dev/null || gem install fastlane --no-document
+          ruby --version
+          pod --version
+          fastlane --version
+
       - name: Setup EAS CLI
         if: ${{ inputs.platform != 'windows' }}
         run: npx --yes eas-cli@21.0.0 --version
@@ -286,7 +302,7 @@ jobs:
           npx --yes eas-cli@21.0.0 build --local \
             --non-interactive \
             --platform "$BUILD_PLATFORM" \
-            --profile "$BUILD_PROFILE"
+            --profile "$BUILD_PROFILE" 2>&1 | node ../builder/.github/scripts/redact-eas-build-log.cjs
 
       - name: Validate Electron Windows project
         if: ${{ inputs.platform == 'windows' }}
