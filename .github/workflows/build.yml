@@ -299,10 +299,14 @@ jobs:
           GH_MODULE_TOKEN: ${{ secrets.GH_MODULE_TOKEN }}
         run: |
           mkdir -p "$EAS_LOCAL_BUILD_ARTIFACTS_DIR"
-          npx --yes eas-cli@27.11.0 build --local \
-            --non-interactive \
-            --platform "$BUILD_PLATFORM" \
-            --profile "$BUILD_PROFILE" 2>&1 | node ../builder/.github/scripts/redact-eas-build-log.cjs
+          if [[ -f ios/.native-ios-staging && -f native/ios/Scripts/archive.cjs ]]; then
+            node native/ios/Scripts/archive.cjs "$PWD"
+          else
+            npx --yes eas-cli@27.11.0 build --local \
+              --non-interactive \
+              --platform "$BUILD_PLATFORM" \
+              --profile "$BUILD_PROFILE" 2>&1 | node ../builder/.github/scripts/redact-eas-build-log.cjs
+          fi
 
       - name: Validate Electron Windows project
         if: ${{ inputs.platform == 'windows' }}
