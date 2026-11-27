@@ -1,0 +1,110 @@
+name: 2 Camera App Store Upload
+run-name: 2 Camera App Store Upload | mobile-apps | ${{ inputs.app_ref }} | ${{ inputs.build }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_ref:
+        description: Immutable mobile-apps commit SHA to publish
+        required: true
+        type: string
+      runner_os:
+        description: macOS runner pool; macos-15 explicitly selects Xcode 26.3
+        required: true
+        type: choice
+        default: macos-26
+        options: [macos-26, macos-15]
+      build:
+        description: Unique numeric App Store build number
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: two-camera-store
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ${{ inputs.runner_os || 'macos-26' }}
+    timeout-minutes: 60
+    steps:
+      - name: Validate release inputs
+        shell: bash
+        env:
+          APP_REF: ${{ inputs.app_ref }}
+          RELEASE_BUILD: ${{ inputs.build }}
+        run: |
+          set -euo pipefail
+          [[ "$APP_REF" =~ ^[0-9a-f]{40}$ ]] || { echo 'An immutable commit SHA is required'; exit 1; }
+          [[ "$RELEASE_BUILD" =~ ^[0-9]+$ ]] || { echo 'Invalid build number'; exit 1; }
+
+      - name: Checkout native application
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: hoangdaicntt/mobile-apps
+          ref: ${{ inputs.app_ref }}
+          token: ${{ secrets.GH_TOKEN }}
+          path: app
+          persist-credentials: false
+
+      - name: Select supported release toolchain
+        shell: bash
+        env:
+          RELEASE_RUNNER: ${{ inputs.runner_os || 'macos-26' }}
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_RUNNER" == 'macos-15' ]]; then
+            test -d /Applications/Xcode_26.3.app || { echo 'Required Xcode 26.3 is unavailable'; exit 1; }
+            sudo xcode-select --switch /Applications/Xcode_26.3.app
+          fi
+          xcodebuild -version
+          sdk_version=$(xcrun --sdk iphoneos --show-sdk-version)
+          [[ "$sdk_version" =~ ^([0-9]+) ]] && (( BASH_REMATCH[1] >= 26 )) || { echo 'An iOS 26 or newer SDK is required'; exit 1; }
+          echo "Release iOS SDK: $sdk_version"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Verify release automation
+        working-directory: app
+        run: node --test scripts/tests/testflight-access.test.cjs
+
+      - name: Archive, upload and verify App Store processing
+        working-directory: app
+        env:
+          SIGNING_JSON: ${{ secrets.TWO_CAMERA_STORE_SIGNING }}
+          ASC_JSON: ${{ secrets.TWO_CAMERA_STORE_ASC }}
+          TWO_CAMERA_TEAM_ID: SP2435LM6Q
+          TWO_CAMERA_BUNDLE_ID: com.luongtrinh.twocamera
+          TWO_CAMERA_APP_ID: '6839845944'
+          TWO_CAMERA_RELEASE_TARGET: store
+          TWO_CAMERA_RELEASE_BUILD: ${{ inputs.build }}
+          APP_REF: ${{ inputs.app_ref }}
+        run: |
+          export GITHUB_SHA="$APP_REF"
+          bash scripts/native-testflight.sh
+
+      - name: Retain verified release receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: two-camera-store-receipt
+          path: app/release-receipt.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Remove temporary signing material
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/two-camera.keychain-db" || true
+          python3 - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          shutil.rmtree(root / 'two-camera-signing', ignore_errors=True)
+          (Path.home() / 'Library/MobileDevice/Provisioning Profiles/two-camera.mobileprovision').unlink(missing_ok=True)
+          PY
