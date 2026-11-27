@@ -425,7 +425,7 @@ jobs:
           method: loadlyio-build
 
       - name: Notify Telegram after submission
-        if: ${{ inputs.platform != 'windows' && inputs.artifact == 'submit' && steps.native_ios.outputs.active != 'true' }}
+        if: ${{ false }}
         uses: hoangdaicntt/telegram-installonair-actions@804a54b4124fc6c641232c960b8b0d5996f07c81 # v1.0.5
         with:
           messageTitle: '${{ inputs.repo }}[${{ inputs.branch }}] ${{ inputs.platform }} ${{ inputs.profile }}'
