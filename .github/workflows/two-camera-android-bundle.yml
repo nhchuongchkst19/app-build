@@ -1,0 +1,111 @@
+name: 2 Camera Android Play Bundle
+run-name: 2 Camera AAB | ${{ inputs.app_ref }}
+on:
+  workflow_dispatch:
+    inputs:
+      app_ref:
+        description: Immutable mobile-2-camera source SHA
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: two-camera-android-play-bundle
+  cancel-in-progress: false
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Validate source
+        shell: bash
+        env:
+          APP_REF: ${{ inputs.app_ref }}
+        run: |
+          set -euo pipefail
+          [[ "$APP_REF" =~ ^[0-9a-f]{40}$ ]]
+      - name: Checkout release tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: builder
+          persist-credentials: false
+      - name: Checkout application
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: hoangdaicntt/mobile-2-camera
+          ref: ${{ inputs.app_ref }}
+          token: ${{ secrets.GH_TOKEN }}
+          path: app
+          persist-credentials: false
+      - name: Java 17
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          cache-disabled: ${{ !github.event.repository.private }}
+      - name: Prepare private upload signing
+        env:
+          SIGNING_JSON: ${{ secrets.TWO_CAMERA_ANDROID_UPLOAD_SIGNING }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,base64
+          from pathlib import Path
+          data=json.loads(os.environ['SIGNING_JSON'])
+          assert data['applicationId']=='com.luongtrinh.twocamera'
+          root=Path(os.environ['RUNNER_TEMP'])/'two-camera-android-signing'
+          root.mkdir(mode=0o700)
+          key=root/'upload.p12'
+          key.write_bytes(base64.b64decode(data['keystoreBase64'],validate=True));key.chmod(0o600)
+          values={'TWO_CAMERA_UPLOAD_STORE':str(key),'TWO_CAMERA_UPLOAD_STORE_PASSWORD':data['storePassword'],'TWO_CAMERA_UPLOAD_KEY_ALIAS':data['keyAlias'],'TWO_CAMERA_UPLOAD_KEY_PASSWORD':data['keyPassword'],'TWO_CAMERA_UPLOAD_CERT_SHA256':data['certificateSha256']}
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              for name,value in values.items():
+                  assert value and '\n' not in value and '\r' not in value
+                  if 'PASSWORD' in name:print('::add-mask::'+value)
+                  out.write(name+'='+value+'\n')
+          PY
+      - name: Install required Android SDK
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-36' 'build-tools;35.0.0' >/dev/null
+      - name: Build signed upload bundle
+        working-directory: app/android
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon :app:bundleRelease :app:lintRelease -PplayBundle=true
+      - name: Pin bundle validation tool
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 'https://github.com/google/bundletool/releases/download/1.18.2/bundletool-all-1.18.2.jar' -o "$RUNNER_TEMP/bundletool.jar"
+          echo "378b5434cd1378bef6b2bc527b8c7f0ff2584b273830335bce54d6d0813c8584  $RUNNER_TEMP/bundletool.jar" | sha256sum -c -
+      - name: Validate signed AAB and Play requirements
+        env:
+          APP_REF: ${{ inputs.app_ref }}
+        run: |
+          set -euo pipefail
+          mkdir -p delivery
+          cp app/android/app/build/outputs/bundle/release/app-release.aab delivery/2-camera-1.0.0-1.aab
+          java -jar "$RUNNER_TEMP/bundletool.jar" validate --bundle=delivery/2-camera-1.0.0-1.aab
+          java -jar "$RUNNER_TEMP/bundletool.jar" dump manifest --bundle=delivery/2-camera-1.0.0-1.aab > "$RUNNER_TEMP/bundle-manifest.xml"
+          java -jar "$RUNNER_TEMP/bundletool.jar" dump config --bundle=delivery/2-camera-1.0.0-1.aab > "$RUNNER_TEMP/bundle-config.json"
+          jarsigner -verify delivery/2-camera-1.0.0-1.aab
+          python3 builder/.github/scripts/two-camera/verify-android-bundle.py
+      - name: Upload AAB and public certificate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: two-camera-google-play-aab
+          path: delivery/
+          retention-days: 7
+          if-no-files-found: error
+      - name: Remove private signing material
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,shutil
+          from pathlib import Path
+          shutil.rmtree(Path(os.environ['RUNNER_TEMP'])/'two-camera-android-signing',ignore_errors=True)
+          PY
