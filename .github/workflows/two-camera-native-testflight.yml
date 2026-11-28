@@ -1,11 +1,11 @@
 name: Native iOS TestFlight
-run-name: Native iOS TestFlight | mobile-apps | ${{ inputs.app_ref }} | ${{ inputs.build }}
+run-name: Native iOS TestFlight | mobile-2-camera | ${{ inputs.app_ref }} | ${{ inputs.build }}
 
 on:
   workflow_dispatch:
     inputs:
       app_ref:
-        description: Immutable mobile-apps commit SHA to publish
+        description: Immutable mobile-2-camera commit SHA to publish
         required: true
         type: string
       runner_os:
@@ -44,7 +44,7 @@ jobs:
       - name: Checkout native application
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          repository: hoangdaicntt/mobile-apps
+          repository: hoangdaicntt/mobile-2-camera
           ref: ${{ inputs.app_ref }}
           token: ${{ secrets.GH_TOKEN }}
           path: app

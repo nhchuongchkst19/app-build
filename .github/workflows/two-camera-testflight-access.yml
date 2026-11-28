@@ -31,7 +31,7 @@ jobs:
           [[ "$RELEASE_BUILD" =~ ^[0-9]+$ ]]
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          repository: hoangdaicntt/mobile-apps
+          repository: hoangdaicntt/mobile-2-camera
           ref: ${{ inputs.app_ref }}
           token: ${{ secrets.GH_TOKEN }}
           persist-credentials: false
